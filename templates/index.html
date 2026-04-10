@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Resume RAGing</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f6f8fb;
+            margin: 0;
+            padding: 30px;
+            color: #222;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 14px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 28px;
+        }
+
+        h2 {
+            font-size: 20px;
+            margin-bottom: 12px;
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        input[type="file"],
+        input[type="text"] {
+            padding: 12px;
+            border: 1px solid #d0d7de;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+
+        button {
+            width: fit-content;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 10px;
+            background: #1f6feb;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1558b0;
+        }
+
+        .meta {
+            font-size: 14px;
+            color: #555;
+            margin-bottom: 10px;
+        }
+
+        .result-box {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 14px;
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+
+        .match {
+            margin-top: 14px;
+            padding: 14px;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            background: #fcfcfd;
+        }
+
+        .score {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>Resume RAGing</h1>
+            <div class="meta">
+                Upload a PDF and ask questions from it.
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Upload Resume PDF</h2>
+            <form action="/upload-ui" method="post" enctype="multipart/form-data">
+                <input type="file" name="file" accept="application/pdf" required />
+                <button type="submit">Upload</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Ask a Question</h2>
+            <form action="/ask-ui" method="post">
+                <input type="text" name="question" placeholder="Ask something like: Python and SQL skills" required />
+                <button type="submit">Ask</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Status</h2>
+            <div class="meta"><strong>File:</strong> {{ filename or "No file uploaded yet" }}</div>
+            <div class="meta"><strong>Chunks:</strong> {{ num_chunks if num_chunks is not none else "-" }}</div>
+        </div>
+
+        <div class="card">
+            <h2>Best Match</h2>
+            <div class="result-box">{{ best_match or "No result yet" }}</div>
+        </div>
+
+        <div class="card">
+            <h2>Top Matches</h2>
+            {% if top_matches %}
+                {% for match in top_matches %}
+                    <div class="match">
+                        <div class="score">Rank {{ match.rank }} | Score: {{ match.score }}</div>
+                        <div class="result-box">{{ match.chunk_text }}</div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="result-box">No matches yet.</div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
