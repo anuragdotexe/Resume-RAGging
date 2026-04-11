@@ -80,6 +80,14 @@
             line-height: 1.5;
         }
 
+        .summary-box {
+            background: #eef6ff;
+            border: 1px solid #bfdcff;
+            border-radius: 10px;
+            padding: 14px;
+            line-height: 1.6;
+        }
+
         .match {
             margin-top: 14px;
             padding: 14px;
@@ -124,6 +132,11 @@
             <h2>Status</h2>
             <div class="meta"><strong>File:</strong> {{ filename or "No file uploaded yet" }}</div>
             <div class="meta"><strong>Chunks:</strong> {{ num_chunks if num_chunks is not none else "-" }}</div>
+        </div>
+
+        <div class="card">
+            <h2>Concise Summary</h2>
+            <div class="summary-box">{{ summary or "No summary yet." }}</div>
         </div>
 
         <div class="card">

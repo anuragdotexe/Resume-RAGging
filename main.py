@@ -116,6 +116,31 @@ def get_local_embeddings(text_list):
     return model.encode(text_list)
 
 
+def clean_text_for_summary(text):
+    cleaned = text.replace("\n", " ").replace("•", "").strip()
+    while "  " in cleaned:
+        cleaned = cleaned.replace("  ", " ")
+    return cleaned
+
+
+def generate_summary(question, top_matches):
+    if not top_matches:
+        return "No relevant information found."
+
+    sections = []
+    for match in top_matches:
+        section = match.get("section", "general")
+        if section not in sections:
+            sections.append(section)
+
+    section_text = ", ".join(sections)
+
+    top_text = clean_text_for_summary(top_matches[0]["chunk_text"])
+    short_text = top_text[:350].strip()
+
+    return f"For '{question}', the most relevant content is from the {section_text} section(s). Key evidence shows: {short_text}..."
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     return templates.TemplateResponse(
@@ -124,6 +149,7 @@ def home(request: Request):
         {
             "filename": None,
             "num_chunks": None,
+            "summary": None,
             "best_match": None,
             "top_matches": []
         }
@@ -139,6 +165,7 @@ async def upload_ui(request: Request, file: UploadFile = File(...)):
             {
                 "filename": None,
                 "num_chunks": None,
+                "summary": None,
                 "best_match": "Only PDF files are allowed.",
                 "top_matches": []
             }
@@ -161,6 +188,7 @@ async def upload_ui(request: Request, file: UploadFile = File(...)):
         {
             "filename": file.filename,
             "num_chunks": len(chunks),
+            "summary": None,
             "best_match": "Document uploaded successfully.",
             "top_matches": []
         }
@@ -176,6 +204,7 @@ async def ask_ui(request: Request, question: str = Form(...)):
             {
                 "filename": None,
                 "num_chunks": None,
+                "summary": None,
                 "best_match": "No document uploaded yet.",
                 "top_matches": []
             }
@@ -197,6 +226,7 @@ async def ask_ui(request: Request, question: str = Form(...)):
         })
 
     best_match = top_matches[0]["chunk_text"] if top_matches else ""
+    summary = generate_summary(question, top_matches)
 
     return templates.TemplateResponse(
         request,
@@ -204,6 +234,7 @@ async def ask_ui(request: Request, question: str = Form(...)):
         {
             "filename": document_store["filename"],
             "num_chunks": len(document_store["chunks"]),
+            "summary": summary,
             "best_match": best_match,
             "top_matches": top_matches
         }
