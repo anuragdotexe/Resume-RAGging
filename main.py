@@ -17,6 +17,7 @@ document_store = {
     "filename": None
 }
 
+
 def extract_text_from_pdf(file_bytes):
     text = ""
     with fitz.open(stream=file_bytes, filetype="pdf") as doc:
@@ -24,68 +25,103 @@ def extract_text_from_pdf(file_bytes):
             text += page.get_text()
     return text
 
-def chunk_text_with_metadata(text, filename, chunk_size=500, overlap=100, min_chunk_size=200):
+
+def chunk_text_with_metadata(text, filename, max_chunk_chars=700):
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+
+    section_keywords = {
+        "experience",
+        "technical skills",
+        "skills",
+        "projects",
+        "education",
+        "certifications",
+        "summary",
+        "work experience",
+        "internship",
+        "achievements"
+    }
+
+    def is_section_header(line):
+        line_clean = line.lower().strip()
+        return line_clean in section_keywords
+
+    sections = []
+    current_section_title = "general"
+    current_section_lines = []
+
+    for line in lines:
+        if is_section_header(line):
+            if current_section_lines:
+                sections.append((current_section_title, current_section_lines))
+            current_section_title = line
+            current_section_lines = [line]
+        else:
+            current_section_lines.append(line)
+
+    if current_section_lines:
+        sections.append((current_section_title, current_section_lines))
+
     chunks = []
-    start = 0
-    text_length = len(text)
     chunk_index = 0
+    char_pointer = 0
 
-    while start < text_length:
-        end = min(start + chunk_size, text_length)
+    for section_title, section_lines in sections:
+        current_lines = []
+        current_length = 0
+        section_start_char = char_pointer
 
-        if end < text_length:
-            newline_pos = text.rfind("\n", start, end)
-            space_pos = text.rfind(" ", start, end)
+        for line in section_lines:
+            line_length = len(line) + 1
 
-            candidate_end = end
-            if newline_pos > start + min_chunk_size:
-                candidate_end = newline_pos
-            elif space_pos > start + min_chunk_size:
-                candidate_end = space_pos
+            if current_length + line_length > max_chunk_chars and current_lines:
+                chunk_text = "\n".join(current_lines).strip()
 
-            end = candidate_end
+                chunks.append({
+                    "chunk_index": chunk_index,
+                    "start_char": section_start_char,
+                    "end_char": section_start_char + current_length,
+                    "source_file": filename,
+                    "section": section_title,
+                    "text": chunk_text
+                })
+                chunk_index += 1
 
-        chunk_text = text[start:end].strip()
+                overlap_lines = current_lines[-2:] if len(current_lines) >= 2 else current_lines[:]
+                current_lines = overlap_lines[:]
+                current_length = sum(len(x) + 1 for x in current_lines)
+                section_start_char = char_pointer - current_length
 
-        if chunk_text:
+            current_lines.append(line)
+            current_length += line_length
+            char_pointer += line_length
+
+        if current_lines:
+            chunk_text = "\n".join(current_lines).strip()
+
             chunks.append({
                 "chunk_index": chunk_index,
-                "start_char": start,
-                "end_char": end,
+                "start_char": section_start_char,
+                "end_char": section_start_char + current_length,
                 "source_file": filename,
+                "section": section_title,
                 "text": chunk_text
             })
             chunk_index += 1
 
-        if end >= text_length:
-            break
-
-        next_start = end - overlap
-        if next_start < 0:
-            next_start = 0
-
-        if next_start > 0:
-            newline_pos = text.find("\n", next_start, min(next_start + 50, text_length))
-            space_pos = text.find(" ", next_start, min(next_start + 50, text_length))
-
-            if newline_pos != -1:
-                next_start = newline_pos + 1
-            elif space_pos != -1:
-                next_start = space_pos + 1
-
-        start = next_start
-
     return chunks
+
 
 def get_local_embeddings(text_list):
     return model.encode(text_list)
 
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     return templates.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             "filename": None,
             "num_chunks": None,
             "best_match": None,
@@ -93,13 +129,14 @@ def home(request: Request):
         }
     )
 
+
 @app.post("/upload-ui", response_class=HTMLResponse)
 async def upload_ui(request: Request, file: UploadFile = File(...)):
     if file.content_type != "application/pdf":
         return templates.TemplateResponse(
+            request,
             "index.html",
             {
-                "request": request,
                 "filename": None,
                 "num_chunks": None,
                 "best_match": "Only PDF files are allowed.",
@@ -119,9 +156,9 @@ async def upload_ui(request: Request, file: UploadFile = File(...)):
     document_store["filename"] = file.filename
 
     return templates.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             "filename": file.filename,
             "num_chunks": len(chunks),
             "best_match": "Document uploaded successfully.",
@@ -129,13 +166,14 @@ async def upload_ui(request: Request, file: UploadFile = File(...)):
         }
     )
 
+
 @app.post("/ask-ui", response_class=HTMLResponse)
 async def ask_ui(request: Request, question: str = Form(...)):
     if not document_store["chunks"] or document_store["embeddings"] is None:
         return templates.TemplateResponse(
+            request,
             "index.html",
             {
-                "request": request,
                 "filename": None,
                 "num_chunks": None,
                 "best_match": "No document uploaded yet.",
@@ -154,15 +192,16 @@ async def ask_ui(request: Request, question: str = Form(...)):
         top_matches.append({
             "rank": rank,
             "score": round(float(similarities[idx]), 4),
+            "section": chunk.get("section", "general"),
             "chunk_text": chunk["text"]
         })
 
     best_match = top_matches[0]["chunk_text"] if top_matches else ""
 
     return templates.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             "filename": document_store["filename"],
             "num_chunks": len(document_store["chunks"]),
             "best_match": best_match,

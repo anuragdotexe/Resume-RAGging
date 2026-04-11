@@ -136,7 +136,7 @@
             {% if top_matches %}
                 {% for match in top_matches %}
                     <div class="match">
-                        <div class="score">Rank {{ match.rank }} | Score: {{ match.score }}</div>
+                        <div class="score">Rank {{ match.rank }} | Score: {{ match.score }} | Section: {{ match.section }}</div>
                         <div class="result-box">{{ match.chunk_text }}</div>
                     </div>
                 {% endfor %}
