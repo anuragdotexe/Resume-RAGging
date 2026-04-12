@@ -1,0 +1,123 @@
+[
+  {
+    "document_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43",
+    "chunk_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43_chunk_0",
+    "chunk_index": 0,
+    "page_number": 1,
+    "start_char": 0,
+    "end_char": 153,
+    "source_file": "Anurag Roy-Resume.pdf",
+    "section": "general",
+    "text": "Anurag Roy\nBangalore - India\n +91 8252717961\n# roy.anurag1177@gmail.com\nï https://www.linkedin.com/in/anurag-111-roy/\n§ https://github.com/anuragdotexe"
+  },
+  {
+    "document_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43",
+    "chunk_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43_chunk_1",
+    "chunk_index": 1,
+    "page_number": 1,
+    "start_char": 153,
+    "end_char": 836,
+    "source_file": "Anurag Roy-Resume.pdf",
+    "section": "Experience",
+    "text": "Experience\nLicious\nJan 2025 – Mar 2026\nLast-Mile Product & Planning (GET)\nBangalore, India\n• Built onboarding funnel product optimizing last-mile onboarding using SQL, Python, A/B testing, reducing TAT by 30%.\n• Led roster management program across 130+ hubs using SQL, Python, reducing CPD from 3.0 to 1.6.\n• Developed hourly manpower model using Python, controlling surge and incentives, reducing cost burn by 40%.\n• Automated incentive calculation pipelines using Python, SQL, Google Apps Script for PAN-India operations and accuracy\nPlanning Analysts Intern\n• Built forecasting pipelines for offline store expansion using Python, SQL, enabling PAN-India demand planning systems."
+  },
+  {
+    "document_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43",
+    "chunk_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43_chunk_2",
+    "chunk_index": 2,
+    "page_number": 1,
+    "start_char": 690,
+    "end_char": 1284,
+    "source_file": "Anurag Roy-Resume.pdf",
+    "section": "Experience",
+    "text": "Planning Analysts Intern\n• Built forecasting pipelines for offline store expansion using Python, SQL, enabling PAN-India demand planning systems.\n• Automated SKU demand planning using Python, APIs, reducing daily computation time by 5 hours across operations.\n• Developed Power BI dashboards using Power BI, SQL, optimizing category performance and reducing costs by 40%.\n• Performed data cleaning using Excel, Python, SQL, improving supply chain data quality and operational accuracy.\nTrajectory Tech\nJun 2024 – Aug 2024\nGen-AI & Prompt Engineering Intern – Business Development\nMumbai, India"
+  },
+  {
+    "document_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43",
+    "chunk_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43_chunk_3",
+    "chunk_index": 3,
+    "page_number": 1,
+    "start_char": 1212,
+    "end_char": 1847,
+    "source_file": "Anurag Roy-Resume.pdf",
+    "section": "Experience",
+    "text": "Gen-AI & Prompt Engineering Intern – Business Development\nMumbai, India\n• Developed prompt workflows using prompt engineering, creating custom queries and markdowns supporting backend systems.\n• Designed automation architectures using GenAI frameworks, APIs, solving workflow inefficiencies across global client systems\n• Built data pipelines using API integrations, GenAI frameworks, reducing delivery delays and improving timelines by 20%.\nMELA (Upcoming Startup)\nMay 2024 – Jun 2024\nAnalytics & Research\nBangalore, India\n• Solved lack of performance visibility by building analytics platform using PowerBI, SQL, Figma, OpenAI APIs."
+  },
+  {
+    "document_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43",
+    "chunk_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43_chunk_4",
+    "chunk_index": 4,
+    "page_number": 1,
+    "start_char": 1719,
+    "end_char": 2080,
+    "source_file": "Anurag Roy-Resume.pdf",
+    "section": "Experience",
+    "text": "Bangalore, India\n• Solved lack of performance visibility by building analytics platform using PowerBI, SQL, Figma, OpenAI APIs.\n• Improved decision visibility by defining KPIs using Python, SQL, increasing performance tracking accuracy by 20%.\n• Reduced workflow inefficiencies by automating processes using Tableau, Mixpanel, SQL analytics across cross teams."
+  },
+  {
+    "document_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43",
+    "chunk_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43_chunk_5",
+    "chunk_index": 5,
+    "page_number": 1,
+    "start_char": 2080,
+    "end_char": 2686,
+    "source_file": "Anurag Roy-Resume.pdf",
+    "section": "Technical Skills",
+    "text": "Technical Skills\n• Programming & Data Processing: Python, PySpark, Spark SQL\n• Claude & AI Workflows: Advanced prompting, structured reasoning, workflow design, and automation-driven problem solving\n• Advanced SQL & MongoDB: Complex queries, joins, CTEs, window functions, aggregations, and performance optimization.\n• Data Visualization & Business Intelligence: MS Power BI, Excel dashboards, KPI tracking\n• AI & GenAI Systems: Local LLMs (Ollama), RAG pipelines , AI-driven automation Python workflows\n• Automation & Risk Frameworks: Python, Pandas, APIs, scripting, CAPA processes, root-cause analysis."
+  },
+  {
+    "document_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43",
+    "chunk_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43_chunk_6",
+    "chunk_index": 6,
+    "page_number": 1,
+    "start_char": 2686,
+    "end_char": 2856,
+    "source_file": "Anurag Roy-Resume.pdf",
+    "section": "Education",
+    "text": "Education\nNational Institute Of Technology Rourkela\nDec. 2021 – July 2025\nB.Tech in Mining Engineering with Minor - Electronics and Communication Engineering\nCGPA :- 7.5"
+  },
+  {
+    "document_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43",
+    "chunk_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43_chunk_7",
+    "chunk_index": 7,
+    "page_number": 1,
+    "start_char": 2856,
+    "end_char": 3463,
+    "source_file": "Anurag Roy-Resume.pdf",
+    "section": "Projects",
+    "text": "Projects\nAGI Cognitive Benchmarking\n2026\nAI Research - Evaluation Framework\n• Engineered AGI benchmark, utilizing Python, Kaggle SDK to evaluate model reasoning, reducing data leakage.\n• Developed logic-based dataset, integrating synthetic tasks and scoring for real-time cognitive tracking and insights.\nNot-excel\n2026\nAI-Powered Spreadsheet Automation (Local LLM)\n• Built a Python-based AI prompt tool that executes spreadsheet tasks from Excel formulas or plain-English prompts.\n• Implemented a step-by-step workflow: upload Excel, run transformations iteratively, preview outputs, and download results."
+  },
+  {
+    "document_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43",
+    "chunk_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43_chunk_8",
+    "chunk_index": 8,
+    "page_number": 1,
+    "start_char": 3222,
+    "end_char": 3919,
+    "source_file": "Anurag Roy-Resume.pdf",
+    "section": "Projects",
+    "text": "• Built a Python-based AI prompt tool that executes spreadsheet tasks from Excel formulas or plain-English prompts.\n• Implemented a step-by-step workflow: upload Excel, run transformations iteratively, preview outputs, and download results.\n• Deployed locally using Ollama, enabling controlled AI usage and future fine-tuning without external API dependency.\nPlayer Journey Visualization Tool\n2026\nGameplay Telemetry Analysis Platform\n• Analyzed gameplay telemetry using Pandas, PyArrow, reconstructing matches and mapping movement patterns accurately.\n• Visualized player behavior using Plotly, Streamlit, identifying density trends, engagement zones, and anomalies.\nSupply Chain Automation\n2025"
+  },
+  {
+    "document_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43",
+    "chunk_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43_chunk_9",
+    "chunk_index": 9,
+    "page_number": 1,
+    "start_char": 3890,
+    "end_char": 4195,
+    "source_file": "Anurag Roy-Resume.pdf",
+    "section": "Projects",
+    "text": "Supply Chain Automation\n2025\nData Engineering - Workflow Orchestration\n• Architected ETL pipeline, utilizing n8n, Supabase to automate data ingestion from Gmail, reducing manual entry.\n• Developed AI-powered dashboard, integrating Quadratic, PostgreSQL for real-time OTIF tracking and inventory insights."
+  },
+  {
+    "document_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43",
+    "chunk_id": "32f12eef-1a6e-41ff-84ee-3955ea582e43_chunk_10",
+    "chunk_index": 10,
+    "page_number": 1,
+    "start_char": 4195,
+    "end_char": 4662,
+    "source_file": "Anurag Roy-Resume.pdf",
+    "section": "Achievements",
+    "text": "Achievements\n• Google DeepMind and Gemini: Engineered AGI benchmarks and developed featured apps with Gemini.\n• NASA(Citizen Scientist): Built predictive models on celestial datasets, improving accuracy by 15% and workflows by 10%.\n• GlassFlow Feedback Project: Improved data extraction workflows, increasing overall productivity and efficiency by 20%.\n• Competitive Programs: Selected participant in Amazon ML Summer School, Flipkart Grid, Adobe GenSolve, GSSOC’24."
+  }
+]

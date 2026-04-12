@@ -4,5 +4,5 @@ python-multipart
 pymupdf
 jinja2
 sentence-transformers
-scikit-learn
 numpy
+faiss-cpu

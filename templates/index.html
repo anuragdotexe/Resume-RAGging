@@ -4,12 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Resume RAGing</title>
+
     <style>
         body {
             font-family: Arial, sans-serif;
             background: #f6f8fb;
             margin: 0;
-            padding: 30px;
+            padding: 20px;
             color: #222;
         }
 
@@ -21,40 +22,41 @@
         .card {
             background: white;
             border-radius: 14px;
-            padding: 20px;
-            margin-bottom: 20px;
+            padding: 18px;
+            margin-bottom: 16px;
             box-shadow: 0 4px 14px rgba(0,0,0,0.08);
         }
 
         h1 {
             margin-top: 0;
-            font-size: 28px;
+            font-size: 26px;
         }
 
         h2 {
-            font-size: 20px;
-            margin-bottom: 12px;
+            font-size: 18px;
+            margin-bottom: 10px;
         }
 
         form {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 10px;
         }
 
         input[type="file"],
-        input[type="text"] {
-            padding: 12px;
+        input[type="text"],
+        select {
+            padding: 10px;
             border: 1px solid #d0d7de;
-            border-radius: 10px;
+            border-radius: 8px;
             font-size: 14px;
         }
 
         button {
             width: fit-content;
-            padding: 10px 18px;
+            padding: 8px 16px;
             border: none;
-            border-radius: 10px;
+            border-radius: 8px;
             background: #1f6feb;
             color: white;
             font-size: 14px;
@@ -66,50 +68,86 @@
         }
 
         .meta {
-            font-size: 14px;
+            font-size: 13px;
             color: #555;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .result-box {
             background: #f9fafb;
             border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            padding: 14px;
+            border-radius: 8px;
+            padding: 12px;
             white-space: pre-wrap;
-            line-height: 1.5;
+            line-height: 1.4;
+            font-size: 13px;
         }
 
         .summary-box {
             background: #eef6ff;
             border: 1px solid #bfdcff;
-            border-radius: 10px;
-            padding: 14px;
-            line-height: 1.6;
+            border-radius: 8px;
+            padding: 12px;
+            line-height: 1.5;
+            font-size: 13px;
         }
 
         .match {
-            margin-top: 14px;
-            padding: 14px;
+            margin-top: 10px;
+            padding: 12px;
             border: 1px solid #e5e7eb;
-            border-radius: 10px;
+            border-radius: 8px;
             background: #fcfcfd;
         }
 
         .score {
-            font-size: 13px;
+            font-size: 12px;
             color: #666;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .card {
+                padding: 12px;
+            }
+
+            input, button, select {
+                font-size: 13px;
+            }
         }
     </style>
 </head>
+
 <body>
     <div class="container">
+
         <div class="card">
             <h1>Resume RAGing</h1>
             <div class="meta">
                 Upload a PDF and ask questions from it.
             </div>
+        </div>
+
+        <div class="card">
+            <h2>Select Stored Document</h2>
+            <form action="/select-document" method="post">
+                <select name="document_id" required>
+                    {% if available_documents %}
+                        {% for doc in available_documents %}
+                            <option value="{{ doc.document_id }}" {% if doc.document_id == active_document_id %}selected{% endif %}>
+                                {{ doc.filename }} ({{ doc.num_chunks }} chunks)
+                            </option>
+                        {% endfor %}
+                    {% else %}
+                        <option disabled selected>No stored documents available</option>
+                    {% endif %}
+                </select>
+                <button type="submit">Load Document</button>
+            </form>
         </div>
 
         <div class="card">
@@ -130,33 +168,47 @@
 
         <div class="card">
             <h2>Status</h2>
-            <div class="meta"><strong>File:</strong> {{ filename or "No file uploaded yet" }}</div>
+            <div class="meta"><strong>Active File:</strong> {{ filename or "No file loaded yet" }}</div>
             <div class="meta"><strong>Chunks:</strong> {{ num_chunks if num_chunks is not none else "-" }}</div>
         </div>
 
         <div class="card">
-            <h2>Concise Summary</h2>
-            <div class="summary-box">{{ summary or "No summary yet." }}</div>
+            <h2>Final Answer</h2>
+            <div class="summary-box">
+                {{ summary or "No answer yet." }}
+            </div>
         </div>
 
         <div class="card">
-            <h2>Best Match</h2>
-            <div class="result-box">{{ best_match or "No result yet" }}</div>
+            <h2>Top Evidence</h2>
+            <div class="result-box">
+                {{ best_match or "No result yet" }}
+            </div>
         </div>
 
         <div class="card">
-            <h2>Top Matches</h2>
+            <h2>Retrieved Chunks</h2>
+
             {% if top_matches %}
                 {% for match in top_matches %}
                     <div class="match">
-                        <div class="score">Rank {{ match.rank }} | Score: {{ match.score }} | Section: {{ match.section }}</div>
-                        <div class="result-box">{{ match.chunk_text }}</div>
+                        <div class="score">
+                            Rank {{ match.rank }} |
+                            Distance: {{ match.score }} |
+                            Section: {{ match.section }} |
+                            Page: {{ match.page_number }}
+                        </div>
+
+                        <div class="result-box">
+                            {{ match.chunk_text }}
+                        </div>
                     </div>
                 {% endfor %}
             {% else %}
-                <div class="result-box">No matches yet.</div>
+                <div class="result-box">No retrieved chunks yet.</div>
             {% endif %}
         </div>
+
     </div>
 </body>
 </html>
