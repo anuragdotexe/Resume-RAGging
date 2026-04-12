@@ -1,4 +1,13 @@
-venv/
+# Ignore storage (user uploaded data)
+storage/
+
+# Python cache
 __pycache__/
 *.pyc
+
+# Virtual env
+venv/
+.env
+
+# Mac
 .DS_Store

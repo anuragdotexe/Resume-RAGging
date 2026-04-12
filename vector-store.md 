@@ -1,0 +1,35 @@
+# Vector Store Overview
+
+## Stack
+- Vector DB: FAISS `IndexFlatL2` (exact L2 search)
+- Embeddings: SentenceTransformer `all-MiniLM-L6-v2`
+
+## Retrieval Flow
+PDF → text extraction (PyMuPDF/fitz) → section-aware chunking (~700 chars) → embeddings → FAISS index → top‑k search (k=3) → if best distance > 1.75 ⇒ “No reliable answer”.
+
+## Storage Layout
+- Per document: `storage/<document_id>/faiss_index.bin` and `chunks_metadata.json`
+- Registry of uploads: `storage/registry.json`
+- Only one index loaded in memory at a time (the latest or selected document).
+
+## Runtime Behavior
+- On startup, loads the most recent document/index.
+- Switch active document via `/select-document` (UI or API).
+- Single-process, in‑memory search; no external vector service.
+
+## Why FAISS Here
+- Lightweight, in‑process, zero external dependency.
+- Fast for small/medium corpora like single resumes.
+- Exact search (no ANN) keeps results predictable.
+
+## Limits / Notes
+- PDF-only ingestion; no authentication.
+- Exact search only (no ANN); re-upload rebuilds the index.
+- Persistence is local filesystem; ensure `storage/` is kept if you want history.
+
+## Quick Usage
+```bash
+uvicorn main:app --reload
+```
+- Upload PDF via UI (`/upload-ui`) or POST `/upload`.
+- Ask questions via UI (`/ask-ui`) or POST `/ask`.
