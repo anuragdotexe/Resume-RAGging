@@ -526,3 +526,5 @@ async def ask_ui(request: Request, question: str = Form(...)):
                 "active_document_id": document_store["document_id"]
             }
         )
+    
+    #work in progress, will add more features and optimizations in the future.
