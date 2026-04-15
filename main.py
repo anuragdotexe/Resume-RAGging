@@ -527,4 +527,3 @@ async def ask_ui(request: Request, question: str = Form(...)):
             }
         )
     
-    #work in progress, will add more features and optimizations in the future.
