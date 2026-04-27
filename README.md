@@ -98,4 +98,4 @@ Resume-RAGing/
 - The embedding model may need an initial download from Hugging Face the first time the app runs.
 - Resume Q&A is currently stronger than the JD-question generation path; the JD flow still needs stricter evidence validation and better snippet selection.
 
-# work in progress
+
