@@ -24,6 +24,8 @@ STRONG_MATCH_DISTANCE_THRESHOLD = 1.05
 PARTIAL_MATCH_DISTANCE_THRESHOLD = 1.45
 MAX_JD_REQUIREMENTS = 8
 MAX_INTERVIEW_QUESTIONS = 6
+EXPERIENCE_SECTION_BOOST = 0.22
+SKILLS_SECTION_PENALTY = 0.12
 
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
@@ -321,6 +323,108 @@ def truncate_text(text, limit=220):
     return cleaned[: limit - 3].rstrip() + "..."
 
 
+def normalize_text(text: str):
+    return re.sub(r"\s+", " ", text.strip())
+
+
+def split_into_bullets(text: str):
+    normalized = text.replace("\r", "")
+    parts = re.split(r"\n+|•", normalized)
+    return [normalize_text(part) for part in parts if normalize_text(part)]
+
+
+def select_relevant_evidence_lines(question: str, top_matches: list, limit=3):
+    question_words = {
+        word for word in re.findall(r"[a-zA-Z0-9\+\#]+", question.lower())
+        if len(word) > 2
+    }
+
+    scored_lines = []
+    for match in top_matches:
+        for line in split_into_bullets(match["chunk_text"]):
+            line_lower = line.lower()
+            overlap = sum(1 for word in question_words if word in line_lower)
+            score = overlap
+
+            if any(token in line_lower for token in ["reduced", "built", "developed", "led", "automated", "improving"]):
+                score += 2
+            if any(char.isdigit() for char in line):
+                score += 1
+            if match.get("section", "").lower() == "experience":
+                score += 2
+            elif match.get("section", "").lower() == "technical skills":
+                score -= 1
+
+            if score > 0:
+                scored_lines.append((score, line, match))
+
+    scored_lines.sort(key=lambda item: item[0], reverse=True)
+
+    selected = []
+    seen = set()
+    for _, line, match in scored_lines:
+        key = line.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append({
+            "line": line,
+            "section": match.get("section", "general"),
+            "page_number": match.get("page_number")
+        })
+        if len(selected) == limit:
+            break
+
+    return selected
+
+
+def classify_question(question: str):
+    lowered = question.lower()
+    if any(keyword in lowered for keyword in ["skill", "skills", "experience with", "know", "knowledge", "familiar"]):
+        return "skills"
+    if any(keyword in lowered for keyword in ["why", "impact", "achieve", "result", "outcome"]):
+        return "impact"
+    return "general"
+
+
+def adjust_match_score(match: dict):
+    adjusted = match["score"]
+    section = match.get("section", "").lower()
+
+    if section == "experience":
+        adjusted -= EXPERIENCE_SECTION_BOOST
+    elif section == "technical skills":
+        adjusted += SKILLS_SECTION_PENALTY
+
+    return round(adjusted, 4)
+
+
+def rerank_top_matches(question: str, top_matches: list):
+    question_type = classify_question(question)
+    reranked = []
+
+    for match in top_matches:
+        adjusted_score = adjust_match_score(match)
+        chunk_text_lower = match["chunk_text"].lower()
+        if question_type in {"skills", "general"} and any(
+            token in chunk_text_lower for token in ["built", "developed", "led", "reduced", "automated"]
+        ):
+            adjusted_score -= 0.08
+
+        reranked.append({
+            **match,
+            "score": round(match["score"], 4),
+            "adjusted_score": round(adjusted_score, 4)
+        })
+
+    reranked.sort(key=lambda item: item["adjusted_score"])
+
+    for index, match in enumerate(reranked, start=1):
+        match["rank"] = index
+
+    return reranked
+
+
 def split_job_description_into_requirements(job_description: str, max_items=MAX_JD_REQUIREMENTS):
     raw_lines = [line.strip() for line in job_description.splitlines() if line.strip()]
     candidates = []
@@ -472,21 +576,38 @@ def generate_summary(question, top_matches):
     if not top_matches:
         return "No reliable answer found in the selected document."
 
-    sections = []
-    for match in top_matches:
-        section = match.get("section", "general")
-        if section not in sections:
-            sections.append(section)
+    best_match = top_matches[0]
+    evidence_lines = select_relevant_evidence_lines(question, top_matches)
 
-    section_text = ", ".join(sections)
+    if evidence_lines:
+        strongest_evidence = evidence_lines[0]["line"]
+    else:
+        strongest_evidence = truncate_text(best_match["chunk_text"], 220)
 
-    top_text = clean_text_for_summary(top_matches[0]["chunk_text"])
-    short_text = top_text[:350].strip()
+    answer_lines = [
+        f"Yes. The resume shows relevant evidence for '{question}'.",
+        "",
+        "Strongest proof:",
+    ]
 
-    return (
-        f"For '{question}', the most relevant content is from the "
-        f"{section_text} section(s). Key evidence shows: {short_text}..."
-    )
+    for item in evidence_lines:
+        location = f"{item['section']} section"
+        if item["page_number"]:
+            location += f", page {item['page_number']}"
+        answer_lines.append(f"- {item['line']} ({location})")
+
+    if not evidence_lines:
+        answer_lines.append(
+            f"- {strongest_evidence} ({best_match.get('section', 'general')} section, page {best_match.get('page_number')})"
+        )
+
+    answer_lines.extend([
+        "",
+        "Interview-ready talking point:",
+        f"Focus on {strongest_evidence}. Explain the business problem, the tools you used, and the measurable outcome."
+    ])
+
+    return "\n".join(answer_lines)
 
 
 def process_pdf_upload(file_bytes, filename):
@@ -565,6 +686,8 @@ def process_question(question: str):
             "filename": document_store["filename"],
             "top_matches": []
         }
+
+    top_matches = rerank_top_matches(question, top_matches)
 
     answer = generate_summary(question, top_matches)
 
