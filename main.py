@@ -9,6 +9,7 @@ import uuid
 import faiss
 import json
 import os
+import re
 from datetime import datetime
 
 app = FastAPI()
@@ -19,6 +20,10 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 STORAGE_DIR = "storage"
 REGISTRY_PATH = os.path.join(STORAGE_DIR, "registry.json")
 NO_ANSWER_DISTANCE_THRESHOLD = 1.75
+STRONG_MATCH_DISTANCE_THRESHOLD = 1.05
+PARTIAL_MATCH_DISTANCE_THRESHOLD = 1.45
+MAX_JD_REQUIREMENTS = 8
+MAX_INTERVIEW_QUESTIONS = 6
 
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
@@ -45,6 +50,16 @@ class AskResponse(BaseModel):
     document_id: str | None = None
     filename: str | None = None
     top_matches: list
+
+
+class InterviewQuestionsResponse(BaseModel):
+    status: str
+    job_description: str
+    document_id: str | None = None
+    filename: str | None = None
+    questions: list
+    matched_requirements: int
+    gap_requirements: int
 
 
 def get_document_paths(document_id: str):
@@ -268,11 +283,189 @@ def get_available_documents():
     return list(reversed(registry))
 
 
+def build_page_title(filename: str | None):
+    if filename:
+        return f"Resume loaded: {filename}"
+    return "Upload a resume PDF to begin."
+
+
+def render_home(request: Request, **overrides):
+    context = {
+        "filename": document_store["filename"],
+        "num_chunks": len(document_store["chunks"]) if document_store["chunks"] else None,
+        "summary": None,
+        "best_match": None,
+        "top_matches": [],
+        "available_documents": get_available_documents(),
+        "active_document_id": document_store["document_id"],
+        "job_description": "",
+        "interview_questions": [],
+        "interview_summary": None,
+        "page_title": build_page_title(document_store["filename"])
+    }
+    context.update(overrides)
+    return templates.TemplateResponse(request, "index.html", context)
+
+
 def clean_text_for_summary(text):
     cleaned = text.replace("\n", " ").replace("•", "").strip()
     while "  " in cleaned:
         cleaned = cleaned.replace("  ", " ")
     return cleaned
+
+
+def truncate_text(text, limit=220):
+    cleaned = clean_text_for_summary(text)
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 3].rstrip() + "..."
+
+
+def split_job_description_into_requirements(job_description: str, max_items=MAX_JD_REQUIREMENTS):
+    raw_lines = [line.strip() for line in job_description.splitlines() if line.strip()]
+    candidates = []
+    priority_keywords = {
+        "experience", "required", "preferred", "must", "should", "responsible",
+        "proficient", "knowledge", "expertise", "skills", "ability", "hands-on"
+    }
+
+    for line in raw_lines:
+        normalized_line = re.sub(r"^[\-\*\u2022\d\.\)\( ]+", "", line).strip()
+        if len(normalized_line) < 20:
+            continue
+
+        parts = re.split(r"(?<=[.!?])\s+|;\s+", normalized_line)
+        for part in parts:
+            sentence = part.strip(" -")
+            if len(sentence) < 20:
+                continue
+            score = len(sentence)
+            lowered = sentence.lower()
+            score += sum(25 for keyword in priority_keywords if keyword in lowered)
+            candidates.append((score, sentence))
+
+    seen = set()
+    ranked = []
+    for score, sentence in sorted(candidates, key=lambda item: item[0], reverse=True):
+        key = sentence.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        ranked.append(sentence)
+        if len(ranked) == max_items:
+            break
+
+    return ranked
+
+
+def get_requirement_focus(requirement: str):
+    cleaned = requirement.strip()
+    words = cleaned.split()
+    if len(words) <= 8:
+        return cleaned
+    return " ".join(words[:8]) + "..."
+
+
+def build_question_text(requirement: str, resume_chunk: dict | None, match_label: str):
+    focus_area = get_requirement_focus(requirement)
+    if resume_chunk is None or match_label == "gap":
+        return (
+            f"This role emphasizes '{focus_area}'. Your resume does not show strong direct evidence for it. "
+            f"How would you explain your readiness, learning plan, or adjacent experience in an interview?"
+        )
+
+    evidence = truncate_text(resume_chunk["text"], 140)
+    section = resume_chunk.get("section", "general")
+
+    if match_label == "strong":
+        return (
+            f"The job description asks for '{focus_area}'. Your resume mentions {section} experience such as "
+            f"'{evidence}'. Can you walk through that example, the impact you created, and how it fits this role?"
+        )
+
+    return (
+        f"The role expects '{focus_area}'. Your resume shows related evidence in the {section} section: "
+        f"'{evidence}'. How would you connect that past work to this requirement during an interview?"
+    )
+
+
+def generate_interview_questions(job_description: str):
+    if not document_store["chunks"] or document_store["faiss_index"] is None:
+        refresh_document_store_from_disk()
+
+    if not document_store["chunks"] or document_store["faiss_index"] is None:
+        raise HTTPException(status_code=400, detail="Upload or load a resume before generating interview questions.")
+
+    normalized_jd = job_description.strip()
+    if not normalized_jd:
+        raise HTTPException(status_code=400, detail="Paste a job description to generate interview questions.")
+
+    requirements = split_job_description_into_requirements(normalized_jd)
+    if not requirements:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not identify enough usable requirements from the job description."
+        )
+
+    questions = []
+    matched_requirements = 0
+    gap_requirements = 0
+
+    for requirement in requirements[:MAX_INTERVIEW_QUESTIONS]:
+        requirement_embedding = get_local_embeddings([requirement])
+        distances, indices = document_store["faiss_index"].search(requirement_embedding, 1)
+
+        resume_chunk = None
+        score = None
+        match_label = "gap"
+
+        idx = int(indices[0][0])
+        if idx != -1:
+            score = float(distances[0][0])
+            resume_chunk = document_store["chunks"][idx]
+            if score <= STRONG_MATCH_DISTANCE_THRESHOLD:
+                match_label = "strong"
+                matched_requirements += 1
+            elif score <= PARTIAL_MATCH_DISTANCE_THRESHOLD:
+                match_label = "partial"
+                matched_requirements += 1
+            else:
+                gap_requirements += 1
+        else:
+            gap_requirements += 1
+
+        if match_label == "gap":
+            resume_chunk = resume_chunk if score is not None and score <= NO_ANSWER_DISTANCE_THRESHOLD else None
+
+        questions.append({
+            "requirement": requirement,
+            "focus_area": get_requirement_focus(requirement),
+            "match_label": match_label,
+            "score": round(score, 4) if score is not None else None,
+            "question": build_question_text(requirement, resume_chunk, match_label),
+            "resume_evidence": truncate_text(resume_chunk["text"], 240) if resume_chunk else "No strong matching resume evidence found.",
+            "section": resume_chunk.get("section", "general") if resume_chunk else "gap",
+            "page_number": resume_chunk.get("page_number") if resume_chunk else None
+        })
+
+    if gap_requirements == 0:
+        summary = "All generated questions are tied to clear resume-to-JD overlaps."
+    else:
+        summary = (
+            f"{matched_requirements} questions are built from direct or partial overlaps, and "
+            f"{gap_requirements} focus on likely interview gaps you should prepare to explain."
+        )
+
+    return {
+        "status": "success",
+        "job_description": normalized_jd,
+        "document_id": document_store["document_id"],
+        "filename": document_store["filename"],
+        "questions": questions,
+        "matched_requirements": matched_requirements,
+        "gap_requirements": gap_requirements,
+        "summary": summary
+    }
 
 
 def generate_summary(question, top_matches):
@@ -392,19 +585,7 @@ def startup_load_storage():
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
-    return templates.TemplateResponse(
-        request,
-        "index.html",
-        {
-            "filename": document_store["filename"],
-            "num_chunks": len(document_store["chunks"]) if document_store["chunks"] else None,
-            "summary": None,
-            "best_match": None,
-            "top_matches": [],
-            "available_documents": get_available_documents(),
-            "active_document_id": document_store["document_id"]
-        }
-    )
+    return render_home(request)
 
 
 @app.post("/upload", response_model=UploadResponse)
@@ -421,37 +602,31 @@ async def ask_api(question: str = Form(...)):
     return process_question(question)
 
 
+@app.post("/generate-interview-questions", response_model=InterviewQuestionsResponse)
+async def generate_interview_questions_api(job_description: str = Form(...)):
+    result = generate_interview_questions(job_description)
+    return {
+        "status": result["status"],
+        "job_description": result["job_description"],
+        "document_id": result["document_id"],
+        "filename": result["filename"],
+        "questions": result["questions"],
+        "matched_requirements": result["matched_requirements"],
+        "gap_requirements": result["gap_requirements"]
+    }
+
+
 @app.post("/select-document", response_class=HTMLResponse)
 async def select_document(request: Request, document_id: str = Form(...)):
     success = load_document_into_store(document_id)
 
     if not success:
-        return templates.TemplateResponse(
-            request,
-            "index.html",
-            {
-                "filename": document_store["filename"],
-                "num_chunks": len(document_store["chunks"]) if document_store["chunks"] else None,
-                "summary": None,
-                "best_match": "Could not load selected document.",
-                "top_matches": [],
-                "available_documents": get_available_documents(),
-                "active_document_id": document_store["document_id"]
-            }
-        )
+        return render_home(request, best_match="Could not load selected document.")
 
-    return templates.TemplateResponse(
+    return render_home(
         request,
-        "index.html",
-        {
-            "filename": document_store["filename"],
-            "num_chunks": len(document_store["chunks"]),
-            "summary": None,
-            "best_match": f"Loaded document: {document_store['filename']}",
-            "top_matches": [],
-            "available_documents": get_available_documents(),
-            "active_document_id": document_store["document_id"]
-        }
+        best_match=f"Loaded document: {document_store['filename']}",
+        page_title=f"Interview prep ready for {document_store['filename']}"
     )
 
 
@@ -464,33 +639,15 @@ async def upload_ui(request: Request, file: UploadFile = File(...)):
         file_bytes = await file.read()
         result = process_pdf_upload(file_bytes, file.filename)
 
-        return templates.TemplateResponse(
+        return render_home(
             request,
-            "index.html",
-            {
-                "filename": result["filename"],
-                "num_chunks": result["num_chunks"],
-                "summary": None,
-                "best_match": result["message"],
-                "top_matches": [],
-                "available_documents": get_available_documents(),
-                "active_document_id": document_store["document_id"]
-            }
+            filename=result["filename"],
+            num_chunks=result["num_chunks"],
+            best_match=result["message"],
+            page_title=f"Resume loaded: {result['filename']}"
         )
     except HTTPException as e:
-        return templates.TemplateResponse(
-            request,
-            "index.html",
-            {
-                "filename": document_store["filename"],
-                "num_chunks": len(document_store["chunks"]) if document_store["chunks"] else None,
-                "summary": None,
-                "best_match": e.detail,
-                "top_matches": [],
-                "available_documents": get_available_documents(),
-                "active_document_id": document_store["document_id"]
-            }
-        )
+        return render_home(request, best_match=e.detail)
 
 
 @app.post("/ask-ui", response_class=HTMLResponse)
@@ -499,32 +656,36 @@ async def ask_ui(request: Request, question: str = Form(...)):
         result = process_question(question)
         best_match = result["top_matches"][0]["chunk_text"] if result["top_matches"] else result["answer"]
 
-        return templates.TemplateResponse(
+        return render_home(
             request,
-            "index.html",
-            {
-                "filename": result["filename"],
-                "num_chunks": len(document_store["chunks"]),
-                "summary": result["answer"],
-                "best_match": best_match,
-                "top_matches": result["top_matches"],
-                "available_documents": get_available_documents(),
-                "active_document_id": document_store["document_id"]
-            }
+            filename=result["filename"],
+            num_chunks=len(document_store["chunks"]),
+            summary=result["answer"],
+            best_match=best_match,
+            top_matches=result["top_matches"]
         )
     except HTTPException as e:
-        return templates.TemplateResponse(
+        return render_home(request, best_match=e.detail)
+
+
+@app.post("/generate-interview-questions-ui", response_class=HTMLResponse)
+async def generate_interview_questions_ui(request: Request, job_description: str = Form(...)):
+    try:
+        result = generate_interview_questions(job_description)
+        return render_home(
             request,
-            "index.html",
-            {
-                "filename": document_store["filename"],
-                "num_chunks": len(document_store["chunks"]) if document_store["chunks"] else None,
-                "summary": None,
-                "best_match": e.detail,
-                "top_matches": [],
-                "available_documents": get_available_documents(),
-                "active_document_id": document_store["document_id"]
-            }
+            filename=result["filename"],
+            num_chunks=len(document_store["chunks"]),
+            job_description=result["job_description"],
+            interview_questions=result["questions"],
+            interview_summary=result["summary"],
+            page_title=f"Interview prep ready for {result['filename']}"
+        )
+    except HTTPException as e:
+        return render_home(
+            request,
+            job_description=job_description,
+            best_match=e.detail
         )
     
  

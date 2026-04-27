@@ -6,35 +6,115 @@
     <title>Resume RAGing</title>
 
     <style>
+        :root {
+            --bg: #f4efe6;
+            --ink: #1f1c16;
+            --muted: #645b4c;
+            --panel: rgba(255, 252, 247, 0.92);
+            --panel-strong: #fffaf1;
+            --line: rgba(62, 47, 27, 0.14);
+            --accent: #a64b2a;
+            --accent-dark: #7f371d;
+            --accent-soft: #f6d7c3;
+            --success-soft: #e7f4eb;
+            --warning-soft: #fff0cc;
+            --gap-soft: #f9dfda;
+            --shadow: 0 24px 60px rgba(85, 60, 24, 0.12);
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            background: #f6f8fb;
+            font-family: "Avenir Next", "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(255, 255, 255, 0.75), transparent 34%),
+                linear-gradient(135deg, #f7f1e8 0%, #efe2d0 52%, #ead8be 100%);
             margin: 0;
-            padding: 20px;
-            color: #222;
+            padding: 24px;
+            color: var(--ink);
         }
 
         .container {
-            max-width: 900px;
+            max-width: 1120px;
             margin: auto;
         }
 
+        .hero {
+            padding: 28px;
+            border-radius: 26px;
+            background:
+                linear-gradient(135deg, rgba(255, 250, 241, 0.96), rgba(246, 228, 208, 0.94)),
+                var(--panel);
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(90, 61, 21, 0.1);
+            margin-bottom: 18px;
+        }
+
+        .eyebrow {
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            font-size: 11px;
+            color: var(--accent-dark);
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
         .card {
-            background: white;
-            border-radius: 14px;
-            padding: 18px;
+            background: var(--panel);
+            border-radius: 22px;
+            padding: 20px;
             margin-bottom: 16px;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(90, 61, 21, 0.08);
         }
 
         h1 {
             margin-top: 0;
-            font-size: 26px;
+            margin-bottom: 10px;
+            font-size: clamp(32px, 5vw, 52px);
+            line-height: 0.98;
+            font-family: Georgia, "Times New Roman", serif;
+            max-width: 10ch;
         }
 
         h2 {
-            font-size: 18px;
-            margin-bottom: 10px;
+            font-size: 19px;
+            margin-bottom: 12px;
+            margin-top: 0;
+        }
+
+        .hero-copy {
+            max-width: 720px;
+            color: var(--muted);
+            line-height: 1.6;
+            font-size: 15px;
+        }
+
+        .hero-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 14px;
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.66);
+            border: 1px solid rgba(90, 61, 21, 0.08);
+            color: var(--accent-dark);
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .hero-status::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: var(--accent);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1.05fr 0.95fr;
+            gap: 16px;
+            align-items: start;
         }
 
         form {
@@ -45,38 +125,51 @@
 
         input[type="file"],
         input[type="text"],
-        select {
+        select,
+        textarea {
             padding: 10px;
-            border: 1px solid #d0d7de;
-            border-radius: 8px;
+            border: 1px solid var(--line);
+            border-radius: 14px;
             font-size: 14px;
+            background: rgba(255, 255, 255, 0.9);
+            color: var(--ink);
+        }
+
+        textarea {
+            min-height: 210px;
+            resize: vertical;
+            line-height: 1.5;
         }
 
         button {
             width: fit-content;
-            padding: 8px 16px;
+            padding: 10px 18px;
             border: none;
-            border-radius: 8px;
-            background: #1f6feb;
+            border-radius: 999px;
+            background: var(--accent);
             color: white;
             font-size: 14px;
             cursor: pointer;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            transition: transform 140ms ease, background 140ms ease;
         }
 
         button:hover {
-            background: #1558b0;
+            background: var(--accent-dark);
+            transform: translateY(-1px);
         }
 
         .meta {
             font-size: 13px;
-            color: #555;
+            color: var(--muted);
             margin-bottom: 8px;
         }
 
         .result-box {
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid var(--line);
+            border-radius: 14px;
             padding: 12px;
             white-space: pre-wrap;
             line-height: 1.4;
@@ -84,9 +177,9 @@
         }
 
         .summary-box {
-            background: #eef6ff;
-            border: 1px solid #bfdcff;
-            border-radius: 8px;
+            background: linear-gradient(180deg, rgba(255, 243, 233, 0.92), rgba(255, 251, 245, 0.9));
+            border: 1px solid rgba(166, 75, 42, 0.18);
+            border-radius: 16px;
             padding: 12px;
             line-height: 1.5;
             font-size: 13px;
@@ -95,15 +188,85 @@
         .match {
             margin-top: 10px;
             padding: 12px;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            background: #fcfcfd;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.84);
         }
 
         .score {
             font-size: 12px;
-            color: #666;
+            color: var(--muted);
             margin-bottom: 6px;
+        }
+
+        .panel-stack {
+            display: grid;
+            gap: 16px;
+        }
+
+        .small-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+        }
+
+        .question-card {
+            padding: 16px;
+            border-radius: 18px;
+            border: 1px solid var(--line);
+            background: var(--panel-strong);
+            margin-top: 12px;
+        }
+
+        .question-card.strong {
+            background: var(--success-soft);
+        }
+
+        .question-card.partial {
+            background: var(--warning-soft);
+        }
+
+        .question-card.gap {
+            background: var(--gap-soft);
+        }
+
+        .pill-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            background: rgba(255, 255, 255, 0.76);
+            border: 1px solid rgba(90, 61, 21, 0.08);
+        }
+
+        .question-text {
+            font-size: 15px;
+            line-height: 1.6;
+            margin-bottom: 14px;
+        }
+
+        .supporting-copy {
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .section-label {
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-size: 11px;
+            color: var(--accent-dark);
+            margin-bottom: 10px;
+            font-weight: 700;
         }
 
         @media (max-width: 600px) {
@@ -115,8 +278,19 @@
                 padding: 12px;
             }
 
-            input, button, select {
+            input, button, select, textarea {
                 font-size: 13px;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .grid,
+            .small-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero {
+                padding: 22px;
             }
         }
     </style>
@@ -125,88 +299,136 @@
 <body>
     <div class="container">
 
-        <div class="card">
+        <div class="hero">
+            <div class="eyebrow">Interview Prep Engine</div>
             <h1>Resume RAGing</h1>
-            <div class="meta">
-                Upload a PDF and ask questions from it.
+            <div class="hero-copy">
+                Upload the candidate's resume, paste the target job description, and generate personalized interview questions based on where the resume aligns with the role and where it looks thin.
             </div>
+            <div class="hero-status">{{ page_title }}</div>
         </div>
 
-        <div class="card">
-            <h2>Select Stored Document</h2>
-            <form action="/select-document" method="post">
-                <select name="document_id" required>
-                    {% if available_documents %}
-                        {% for doc in available_documents %}
-                            <option value="{{ doc.document_id }}" {% if doc.document_id == active_document_id %}selected{% endif %}>
-                                {{ doc.filename }} ({{ doc.num_chunks }} chunks)
-                            </option>
+        <div class="grid">
+            <div class="panel-stack">
+                <div class="card">
+                    <h2>Resume Workspace</h2>
+                    <div class="small-grid">
+                        <form action="/select-document" method="post">
+                            <div class="section-label">Stored Resume</div>
+                            <select name="document_id" required>
+                                {% if available_documents %}
+                                    {% for doc in available_documents %}
+                                        <option value="{{ doc.document_id }}" {% if doc.document_id == active_document_id %}selected{% endif %}>
+                                            {{ doc.filename }} ({{ doc.num_chunks }} chunks)
+                                        </option>
+                                    {% endfor %}
+                                {% else %}
+                                    <option disabled selected>No stored documents available</option>
+                                {% endif %}
+                            </select>
+                            <button type="submit">Load Resume</button>
+                        </form>
+
+                        <form action="/upload-ui" method="post" enctype="multipart/form-data">
+                            <div class="section-label">Upload New Resume</div>
+                            <input type="file" name="file" accept="application/pdf" required />
+                            <button type="submit">Upload PDF</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Generate Personalized Interview Questions</h2>
+                    <div class="meta">Paste the target job description. The app will map it against the active resume and build questions around matches and likely gaps.</div>
+                    <form action="/generate-interview-questions-ui" method="post">
+                        <textarea name="job_description" placeholder="Paste the full job description here..." required>{{ job_description }}</textarea>
+                        <button type="submit">Generate Questions</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>Interview Question Pack</h2>
+                    <div class="summary-box">
+                        {{ interview_summary or "No interview questions generated yet." }}
+                    </div>
+
+                    {% if interview_questions %}
+                        {% for item in interview_questions %}
+                            <div class="question-card {{ item.match_label }}">
+                                <div class="pill-row">
+                                    <div class="pill">Question {{ loop.index }}</div>
+                                    <div class="pill">{{ item.match_label|capitalize }} match</div>
+                                    <div class="pill">{{ item.section }}</div>
+                                    {% if item.page_number %}
+                                        <div class="pill">Page {{ item.page_number }}</div>
+                                    {% endif %}
+                                    {% if item.score is not none %}
+                                        <div class="pill">Distance {{ item.score }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="question-text">{{ item.question }}</div>
+                                <div class="supporting-copy"><strong>JD focus:</strong> {{ item.requirement }}</div>
+                                <div class="supporting-copy"><strong>Resume evidence:</strong> {{ item.resume_evidence }}</div>
+                            </div>
                         {% endfor %}
                     {% else %}
-                        <option disabled selected>No stored documents available</option>
+                        <div class="result-box">Questions will appear here after you paste a JD and generate them.</div>
                     {% endif %}
-                </select>
-                <button type="submit">Load Document</button>
-            </form>
-        </div>
-
-        <div class="card">
-            <h2>Upload Resume PDF</h2>
-            <form action="/upload-ui" method="post" enctype="multipart/form-data">
-                <input type="file" name="file" accept="application/pdf" required />
-                <button type="submit">Upload</button>
-            </form>
-        </div>
-
-        <div class="card">
-            <h2>Ask a Question</h2>
-            <form action="/ask-ui" method="post">
-                <input type="text" name="question" placeholder="Ask something like: Python and SQL skills" required />
-                <button type="submit">Ask</button>
-            </form>
-        </div>
-
-        <div class="card">
-            <h2>Status</h2>
-            <div class="meta"><strong>Active File:</strong> {{ filename or "No file loaded yet" }}</div>
-            <div class="meta"><strong>Chunks:</strong> {{ num_chunks if num_chunks is not none else "-" }}</div>
-        </div>
-
-        <div class="card">
-            <h2>Final Answer</h2>
-            <div class="summary-box">
-                {{ summary or "No answer yet." }}
+                </div>
             </div>
-        </div>
 
-        <div class="card">
-            <h2>Top Evidence</h2>
-            <div class="result-box">
-                {{ best_match or "No result yet" }}
-            </div>
-        </div>
+            <div class="panel-stack">
+                <div class="card">
+                    <h2>Status</h2>
+                    <div class="meta"><strong>Active Resume:</strong> {{ filename or "No file loaded yet" }}</div>
+                    <div class="meta"><strong>Chunks Indexed:</strong> {{ num_chunks if num_chunks is not none else "-" }}</div>
+                </div>
 
-        <div class="card">
-            <h2>Retrieved Chunks</h2>
+                <div class="card">
+                    <h2>Resume Q&amp;A</h2>
+                    <form action="/ask-ui" method="post">
+                        <input type="text" name="question" placeholder="Ask something like: Python and SQL skills" required />
+                        <button type="submit">Ask Resume</button>
+                    </form>
+                </div>
 
-            {% if top_matches %}
-                {% for match in top_matches %}
-                    <div class="match">
-                        <div class="score">
-                            Rank {{ match.rank }} |
-                            Distance: {{ match.score }} |
-                            Section: {{ match.section }} |
-                            Page: {{ match.page_number }}
-                        </div>
-
-                        <div class="result-box">
-                            {{ match.chunk_text }}
-                        </div>
+                <div class="card">
+                    <h2>Final Answer</h2>
+                    <div class="summary-box">
+                        {{ summary or "No answer yet." }}
                     </div>
-                {% endfor %}
-            {% else %}
-                <div class="result-box">No retrieved chunks yet.</div>
-            {% endif %}
+                </div>
+
+                <div class="card">
+                    <h2>Top Evidence</h2>
+                    <div class="result-box">
+                        {{ best_match or "No result yet" }}
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Retrieved Chunks</h2>
+
+                    {% if top_matches %}
+                        {% for match in top_matches %}
+                            <div class="match">
+                                <div class="score">
+                                    Rank {{ match.rank }} |
+                                    Distance: {{ match.score }} |
+                                    Section: {{ match.section }} |
+                                    Page: {{ match.page_number }}
+                                </div>
+
+                                <div class="result-box">
+                                    {{ match.chunk_text }}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="result-box">No retrieved chunks yet.</div>
+                    {% endif %}
+                </div>
+            </div>
         </div>
 
     </div>
