@@ -6,3 +6,4 @@ jinja2
 sentence-transformers
 numpy
 faiss-cpu
+requests

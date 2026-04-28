@@ -371,6 +371,9 @@
                         {{ interview_summary or "No interview questions generated yet." }}
                     </div>
                     <div class="meta" style="margin-top: 10px;">{{ research_status }}</div>
+                    {% if research_query %}
+                        <div class="meta">Research query: {{ research_query }}</div>
+                    {% endif %}
                     <div class="meta" style="margin-top: 10px;">{{ latency_summary }}</div>
 
                     {% if company_signals or interview_signals %}
@@ -401,12 +404,6 @@
                                 <div class="question-text">{{ item.question }}</div>
                                 <div class="supporting-copy"><strong>JD focus:</strong> {{ item.requirement }}</div>
                                 <div class="supporting-copy"><strong>Resume evidence:</strong> {{ item.resume_evidence }}</div>
-                                {% if item.company_signal %}
-                                    <div class="supporting-copy"><strong>Company context:</strong> {{ item.company_signal }}</div>
-                                {% endif %}
-                                {% if item.interview_signal %}
-                                    <div class="supporting-copy"><strong>Interview pattern:</strong> {{ item.interview_signal }}</div>
-                                {% endif %}
                             </div>
                         {% endfor %}
                     {% else %}

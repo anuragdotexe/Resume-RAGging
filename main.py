@@ -12,11 +12,12 @@ import os
 import re
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
-from urllib import request as urllib_request
-from urllib import error as urllib_error
+import logging
+import requests
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
+logger = logging.getLogger("resume_raging")
 
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
@@ -31,6 +32,7 @@ MAX_JD_REQUIREMENTS = 8
 MAX_INTERVIEW_QUESTIONS = 6
 EXPERIENCE_SECTION_BOOST = 0.22
 SKILLS_SECTION_PENALTY = 0.12
+GENERAL_SECTION_PENALTY = 0.28
 
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
@@ -84,6 +86,7 @@ class InterviewPrepResponse(BaseModel):
     latency_summary: str
     auto_research_used: bool
     research_status: str
+    research_query: str | None = None
 
 
 def get_document_paths(document_id: str):
@@ -338,7 +341,8 @@ def render_home(request: Request, **overrides):
             "Auto research available via Tavily."
             if TAVILY_API_KEY else
             "Auto research is off. Add TAVILY_API_KEY to enable live company research."
-        )
+        ),
+        "research_query": None
     }
     context.update(overrides)
     return templates.TemplateResponse(request, "index.html", context)
@@ -365,31 +369,24 @@ def normalize_text(text: str):
 def split_into_bullets(text: str):
     normalized = text.replace("\r", "")
     parts = re.split(r"\n+|•", normalized)
-    return [normalize_text(part) for part in parts if normalize_text(part)]
+    bullets = []
+    for part in parts:
+        cleaned = normalize_text(part)
+        if not cleaned:
+            continue
+        if len(cleaned) < 12:
+            continue
+        if re.fullmatch(r"[\d\-\–/: ]+", cleaned):
+            continue
+        bullets.append(cleaned)
+    return bullets
 
 
 def select_relevant_evidence_lines(question: str, top_matches: list, limit=3):
-    question_words = {
-        word for word in re.findall(r"[a-zA-Z0-9\+\#]+", question.lower())
-        if len(word) > 2
-    }
-
     scored_lines = []
     for match in top_matches:
         for line in split_into_bullets(match["chunk_text"]):
-            line_lower = line.lower()
-            overlap = sum(1 for word in question_words if word in line_lower)
-            score = overlap
-
-            if any(token in line_lower for token in ["reduced", "built", "developed", "led", "automated", "improving"]):
-                score += 2
-            if any(char.isdigit() for char in line):
-                score += 1
-            if match.get("section", "").lower() == "experience":
-                score += 2
-            elif match.get("section", "").lower() == "technical skills":
-                score -= 1
-
+            score = score_evidence_line(question, line, match.get("section", ""))
             if score > 0:
                 scored_lines.append((score, line, match))
 
@@ -532,6 +529,52 @@ def count_keyword_overlap(keywords: list[str], text: str):
     return sum(1 for keyword in keywords if keyword in lowered)
 
 
+def is_low_signal_line(line: str):
+    cleaned = normalize_text(line)
+    if len(cleaned) < 20:
+        return True
+    if re.fullmatch(r"[\d\-\–/: ]+", cleaned):
+        return True
+    low_signal_patterns = [
+        r"^[A-Z][a-z]+(?: [A-Z][a-z]+){0,3}$",
+        r"^(experience|technical skills|projects|education|certifications)$",
+        r"^[A-Za-z&\- ]+intern$",
+        r"^[A-Za-z&\- ]+engineer$"
+    ]
+    lowered = cleaned.lower()
+    for pattern in low_signal_patterns:
+        if re.fullmatch(pattern, cleaned) or re.fullmatch(pattern, lowered):
+            return True
+    return False
+
+
+def score_evidence_line(requirement: str, line: str, section: str = ""):
+    if is_low_signal_line(line):
+        return -1
+
+    keywords = extract_focus_keywords(requirement)
+    overlap = count_keyword_overlap(keywords, line)
+    lowered = line.lower()
+    score = overlap * 3
+
+    action_tokens = [
+        "built", "developed", "designed", "engineered", "created", "launched",
+        "automated", "optimized", "implemented", "integrated", "evaluated", "improved"
+    ]
+    if any(token in lowered for token in action_tokens):
+        score += 3
+    if any(char.isdigit() for char in line):
+        score += 1
+    if len(line.split()) >= 8:
+        score += 1
+    if section.lower() in {"experience", "projects"}:
+        score += 2
+    if section.lower() == "technical skills":
+        score -= 1
+
+    return score
+
+
 def extract_context_signals(text: str, max_items=4):
     if not text.strip():
         return []
@@ -566,7 +609,8 @@ def extract_context_signals(text: str, max_items=4):
 
 
 def get_research_query(company_name: str, role_title: str, job_description: str):
-    scope = " ".join(part for part in [company_name.strip(), role_title.strip()] if part).strip()
+    normalized_company = company_name.strip().replace("Open AI", "OpenAI")
+    scope = " ".join(part for part in [normalized_company, role_title.strip()] if part).strip()
     jd_focus = ", ".join(split_job_description_into_requirements(job_description, max_items=3))
     query_parts = [
         scope or "company role interview",
@@ -578,29 +622,54 @@ def get_research_query(company_name: str, role_title: str, job_description: str)
 
 def fetch_tavily_results(query: str, max_results=5):
     if not TAVILY_API_KEY:
-        return []
+        return {
+            "results": [],
+            "status": "Auto research is off. Add TAVILY_API_KEY to enable live company research."
+        }
 
-    payload = json.dumps({
+    payload = {
         "api_key": TAVILY_API_KEY,
         "query": query,
         "search_depth": "basic",
         "max_results": max_results,
         "include_answer": False,
         "include_raw_content": False
-    }).encode("utf-8")
-
-    req = urllib_request.Request(
-        "https://api.tavily.com/search",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
+    }
 
     try:
-        with urllib_request.urlopen(req, timeout=12) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except (urllib_error.URLError, urllib_error.HTTPError, TimeoutError, json.JSONDecodeError):
-        return []
+        response = requests.post(
+            "https://api.tavily.com/search",
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=12
+        )
+        response.raise_for_status()
+        data = response.json()
+    except requests.exceptions.HTTPError as exc:
+        detail = exc.response.text if exc.response is not None else str(exc)
+        logger.warning("Tavily HTTP error for query '%s': %s", query, detail)
+        return {
+            "results": [],
+            "status": f"Tavily HTTP error: {response.status_code}. Check the API key, quota, or request payload."
+        }
+    except requests.exceptions.Timeout as exc:
+        logger.warning("Tavily timeout for query '%s': %s", query, exc)
+        return {
+            "results": [],
+            "status": "Tavily request timed out."
+        }
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Tavily request error for query '%s': %s", query, exc)
+        return {
+            "results": [],
+            "status": f"Tavily request error: {str(exc)}"
+        }
+    except json.JSONDecodeError:
+        logger.warning("Tavily returned invalid JSON for query '%s'", query)
+        return {
+            "results": [],
+            "status": "Tavily returned an unreadable response."
+        }
 
     results = []
     for item in data.get("results", []):
@@ -613,15 +682,32 @@ def fetch_tavily_results(query: str, max_results=5):
                 "content": content,
                 "url": url
             })
-    return results
+    if not results:
+        logger.info("Tavily returned zero usable results for query '%s'", query)
+        return {
+            "results": [],
+            "status": "Tavily ran successfully but returned no usable results."
+        }
+
+    logger.info("Tavily returned %s result(s) for query '%s'", len(results), query)
+    return {
+        "results": results,
+        "status": f"Auto research used {len(results)} live company result(s)."
+    }
 
 
 def run_company_research(company_name: str, role_title: str, job_description: str):
     if WEB_RESEARCH_PROVIDER != "tavily" or not TAVILY_API_KEY:
-        return []
+        return {
+            "query": get_research_query(company_name, role_title, job_description),
+            "results": [],
+            "status": "Auto research is off. Add TAVILY_API_KEY to enable live company research."
+        }
 
     query = get_research_query(company_name, role_title, job_description)
-    return fetch_tavily_results(query)
+    payload = fetch_tavily_results(query)
+    payload["query"] = query
+    return payload
 
 
 def summarize_research_results(results: list[dict], max_items=4):
@@ -632,6 +718,24 @@ def summarize_research_results(results: list[dict], max_items=4):
         if content:
             lines.append(f"{title}: {content}")
     return lines
+
+
+def split_research_results(results: list[dict]):
+    company_results = []
+    interview_results = []
+
+    for item in results:
+        title = (item.get("title") or "").lower()
+        url = (item.get("url") or "").lower()
+        content = (item.get("content") or "").lower()
+        combined = " ".join([title, url, content])
+
+        if any(token in combined for token in ["interview question", "interview guide", "questions & answers", "glassdoor", "hellointerview", "igotanoffer", "careery"]):
+            interview_results.append(item)
+        else:
+            company_results.append(item)
+
+    return company_results, interview_results
 
 
 def estimate_latency_summary(has_company_context: bool, has_interview_notes: bool, live_web_enabled: bool = False):
@@ -651,7 +755,9 @@ def estimate_latency_summary(has_company_context: bool, has_interview_notes: boo
     )
 
 
-def get_research_status(auto_research_used: bool, live_results_count: int):
+def get_research_status(auto_research_used: bool, live_results_count: int, research_status: str):
+    if research_status:
+        return research_status
     if auto_research_used and live_results_count > 0:
         return f"Auto research used {live_results_count} live company result(s)."
     if TAVILY_API_KEY:
@@ -659,30 +765,20 @@ def get_research_status(auto_research_used: bool, live_results_count: int):
     return "Auto research is off. Add TAVILY_API_KEY to enable live company research."
 
 
-def build_supporting_signal_line(company_signals: list, interview_signals: list):
-    signals = []
-    if company_signals:
-        signals.append(f"company context: {company_signals[0]}")
-    if interview_signals:
-        signals.append(f"interview pattern: {interview_signals[0]}")
-    return " | ".join(signals)
-
-
 def select_supporting_evidence_for_requirement(requirement: str, resume_chunk: dict | None):
     if not resume_chunk:
         return "No direct resume evidence found."
 
-    keywords = extract_focus_keywords(requirement)
     scored_lines = []
     for line in split_into_bullets(resume_chunk["text"]):
-        overlap = count_keyword_overlap(keywords, line)
-        bonus = 1 if any(char.isdigit() for char in line) else 0
-        scored_lines.append((overlap + bonus, line))
+        score = score_evidence_line(requirement, line, resume_chunk.get("section", ""))
+        if score > 0:
+            scored_lines.append((score, line))
 
     scored_lines.sort(key=lambda item: item[0], reverse=True)
-    best_line = scored_lines[0][1] if scored_lines else resume_chunk["text"]
+    best_line = scored_lines[0][1] if scored_lines else truncate_text(resume_chunk["text"], 220)
 
-    if count_keyword_overlap(keywords, best_line) == 0 and resume_chunk.get("section", "").lower() == "technical skills":
+    if count_keyword_overlap(extract_focus_keywords(requirement), best_line) == 0 and resume_chunk.get("section", "").lower() == "technical skills":
         return "No direct resume evidence found."
 
     return truncate_text(best_line, 220)
@@ -697,6 +793,10 @@ def classify_requirement_match(requirement: str, score: float | None, resume_chu
     keyword_overlap = count_keyword_overlap(keywords, chunk_text)
     section = resume_chunk.get("section", "").lower()
 
+    if section == "general":
+        if score > 0.95 or keyword_overlap < 2:
+            return "gap"
+        return "partial"
     if keyword_overlap == 0 and section == "technical skills":
         return "gap"
     if score <= STRONG_MATCH_DISTANCE_THRESHOLD and keyword_overlap >= 1:
@@ -720,6 +820,11 @@ def build_question_text(requirement: str, resume_chunk: dict | None, match_label
     section = resume_chunk.get("section", "general")
 
     if match_label == "strong":
+        if section.lower() == "technical skills":
+            return (
+                f"The job description asks for '{focus_area}'. Your resume explicitly lists related capability in the "
+                f"{section} section such as '{evidence}'. How would you back that skill up with a concrete project or work example in an interview?"
+            )
         return (
             f"The job description asks for '{focus_area}'. Your resume mentions {section} experience such as "
             f"'{evidence}'. Can you walk through that example, the impact you created, and how it fits this role?"
@@ -729,6 +834,47 @@ def build_question_text(requirement: str, resume_chunk: dict | None, match_label
         f"The role expects '{focus_area}'. Your resume shows related evidence in the {section} section: "
         f"'{evidence}'. How would you connect that past work to this requirement during an interview?"
     )
+
+
+def score_requirement_match(requirement: str, score: float, resume_chunk: dict):
+    section = resume_chunk.get("section", "").lower()
+    keyword_overlap = count_keyword_overlap(extract_focus_keywords(requirement), resume_chunk["text"])
+    section_bonus = 0
+
+    if section in {"experience", "projects"}:
+        section_bonus += 0.18
+    elif section == "technical skills":
+        section_bonus -= 0.05
+    elif section == "general":
+        section_bonus -= GENERAL_SECTION_PENALTY
+
+    return round((2.2 - score) + (keyword_overlap * 0.14) + section_bonus, 4)
+
+
+def find_best_resume_match_for_requirement(requirement: str, top_k: int = 5):
+    requirement_embedding = get_local_embeddings([requirement])
+    search_k = min(top_k, len(document_store["chunks"]))
+    distances, indices = document_store["faiss_index"].search(requirement_embedding, search_k)
+
+    candidates = []
+    for idx, distance in zip(indices[0], distances[0]):
+        idx = int(idx)
+        if idx == -1:
+            continue
+        chunk = document_store["chunks"][idx]
+        semantic_score = float(distance)
+        candidates.append({
+            "chunk": chunk,
+            "score": semantic_score,
+            "match_strength": score_requirement_match(requirement, semantic_score, chunk)
+        })
+
+    if not candidates:
+        return None, None
+
+    candidates.sort(key=lambda item: item["match_strength"], reverse=True)
+    best = candidates[0]
+    return best["chunk"], best["score"]
 
 
 def generate_interview_prep(
@@ -771,12 +917,26 @@ def generate_interview_prep(
         pasted_company_signals = company_future.result()
         interview_signals = interview_future.result()
         requirement_focuses = jd_focus_future.result()
-        live_research_results = live_research_future.result() if live_research_future else []
+        live_research_payload = live_research_future.result() if live_research_future else {
+            "query": None,
+            "results": [],
+            "status": ""
+        }
 
-    auto_company_signals = summarize_research_results(live_research_results)
+    live_research_results = live_research_payload.get("results", [])
+    research_query = live_research_payload.get("query")
+    live_research_status = live_research_payload.get("status", "")
+
+    company_results, interview_results = split_research_results(live_research_results)
+    auto_company_signals = summarize_research_results(company_results)
+    auto_interview_signals = summarize_research_results(interview_results)
+
     company_signals = auto_company_signals + pasted_company_signals
     if len(company_signals) > 4:
         company_signals = company_signals[:4]
+    interview_signals = auto_interview_signals + interview_signals
+    if len(interview_signals) > 4:
+        interview_signals = interview_signals[:4]
     auto_research_used = bool(live_research_results)
 
     questions = []
@@ -784,16 +944,7 @@ def generate_interview_prep(
     gap_requirements = 0
 
     for requirement, focus_area in zip(requirements[:MAX_INTERVIEW_QUESTIONS], requirement_focuses[:MAX_INTERVIEW_QUESTIONS]):
-        requirement_embedding = get_local_embeddings([requirement])
-        distances, indices = document_store["faiss_index"].search(requirement_embedding, 1)
-
-        resume_chunk = None
-        score = None
-
-        idx = int(indices[0][0])
-        if idx != -1:
-            score = float(distances[0][0])
-            resume_chunk = document_store["chunks"][idx]
+        resume_chunk, score = find_best_resume_match_for_requirement(requirement)
 
         match_label = classify_requirement_match(requirement, score, resume_chunk)
         if match_label in {"strong", "partial"}:
@@ -802,10 +953,7 @@ def generate_interview_prep(
             gap_requirements += 1
             resume_chunk = None
 
-        supporting_signal = build_supporting_signal_line(company_signals, interview_signals)
         question_text = build_question_text(requirement, resume_chunk, match_label)
-        if supporting_signal:
-            question_text = f"{question_text} Keep in mind this external signal: {supporting_signal}."
 
         questions.append({
             "requirement": requirement,
@@ -847,7 +995,8 @@ def generate_interview_prep(
         "interview_signals": interview_signals,
         "latency_summary": estimate_latency_summary(bool(company_signals), bool(interview_signals), auto_research_used),
         "auto_research_used": auto_research_used,
-        "research_status": get_research_status(auto_research_used, len(live_research_results))
+        "research_status": get_research_status(auto_research_used, len(live_research_results), live_research_status),
+        "research_query": research_query
     }
 
 
@@ -1037,7 +1186,8 @@ async def generate_interview_questions_api(
         "interview_signals": result["interview_signals"],
         "latency_summary": result["latency_summary"],
         "auto_research_used": result["auto_research_used"],
-        "research_status": result["research_status"]
+        "research_status": result["research_status"],
+        "research_query": result["research_query"]
     }
 
 
@@ -1126,6 +1276,7 @@ async def generate_interview_questions_ui(
             latency_summary=result["latency_summary"],
             auto_research_used=result["auto_research_used"],
             research_status=result["research_status"],
+            research_query=result["research_query"],
             page_title=f"Interview prep ready for {result['filename']}"
         )
     except HTTPException as e:
