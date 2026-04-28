@@ -11,6 +11,9 @@ import json
 import os
 import re
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+from urllib import request as urllib_request
+from urllib import error as urllib_error
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -19,6 +22,8 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 
 STORAGE_DIR = "storage"
 REGISTRY_PATH = os.path.join(STORAGE_DIR, "registry.json")
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "").strip()
+WEB_RESEARCH_PROVIDER = os.getenv("WEB_RESEARCH_PROVIDER", "tavily").strip().lower()
 NO_ANSWER_DISTANCE_THRESHOLD = 1.75
 STRONG_MATCH_DISTANCE_THRESHOLD = 1.05
 PARTIAL_MATCH_DISTANCE_THRESHOLD = 1.45
@@ -62,6 +67,23 @@ class InterviewQuestionsResponse(BaseModel):
     questions: list
     matched_requirements: int
     gap_requirements: int
+
+
+class InterviewPrepResponse(BaseModel):
+    status: str
+    company_name: str | None = None
+    role_title: str | None = None
+    job_description: str
+    document_id: str | None = None
+    filename: str | None = None
+    questions: list
+    matched_requirements: int
+    gap_requirements: int
+    company_signals: list
+    interview_signals: list
+    latency_summary: str
+    auto_research_used: bool
+    research_status: str
 
 
 def get_document_paths(document_id: str):
@@ -303,7 +325,20 @@ def render_home(request: Request, **overrides):
         "job_description": "",
         "interview_questions": [],
         "interview_summary": None,
-        "page_title": build_page_title(document_store["filename"])
+        "page_title": build_page_title(document_store["filename"]),
+        "company_name": "",
+        "role_title": "",
+        "company_context": "",
+        "interview_notes": "",
+        "company_signals": [],
+        "interview_signals": [],
+        "latency_summary": "Resume embedding is cached after upload. The slowest future step will be live company research unless you paste research notes here.",
+        "auto_research_used": False,
+        "research_status": (
+            "Auto research available via Tavily."
+            if TAVILY_API_KEY else
+            "Auto research is off. Add TAVILY_API_KEY to enable live company research."
+        )
     }
     context.update(overrides)
     return templates.TemplateResponse(request, "index.html", context)
@@ -470,6 +505,209 @@ def get_requirement_focus(requirement: str):
     return " ".join(words[:8]) + "..."
 
 
+def extract_focus_keywords(text: str):
+    stop_words = {
+        "with", "from", "that", "this", "into", "their", "there", "about", "across",
+        "ability", "skills", "skill", "knowledge", "experience", "required", "preferred",
+        "should", "would", "could", "role", "team", "work", "working", "using", "build",
+        "strong", "excellent", "closely", "understand", "translate", "improve", "improving"
+    }
+    words = re.findall(r"[a-zA-Z][a-zA-Z\-\+&/]+", text.lower())
+    keywords = []
+    seen = set()
+    for word in words:
+        if len(word) < 4 or word in stop_words or word in seen:
+            continue
+        seen.add(word)
+        keywords.append(word)
+        if len(keywords) == 6:
+            break
+    return keywords
+
+
+def count_keyword_overlap(keywords: list[str], text: str):
+    if not keywords:
+        return 0
+    lowered = text.lower()
+    return sum(1 for keyword in keywords if keyword in lowered)
+
+
+def extract_context_signals(text: str, max_items=4):
+    if not text.strip():
+        return []
+
+    candidates = []
+    for line in [line.strip() for line in text.splitlines() if line.strip()]:
+        normalized = re.sub(r"^[\-\*\u2022\d\.\)\( ]+", "", line).strip()
+        if len(normalized) < 20:
+            continue
+        for part in re.split(r"(?<=[.!?])\s+|;\s+", normalized):
+            sentence = part.strip()
+            if len(sentence) < 20:
+                continue
+            keywords = extract_focus_keywords(sentence)
+            score = len(keywords) + len(sentence) / 100
+            if any(token in sentence.lower() for token in ["interview", "culture", "stakeholder", "ownership", "business", "analytics"]):
+                score += 1.5
+            candidates.append((score, sentence))
+
+    ranked = []
+    seen = set()
+    for _, sentence in sorted(candidates, key=lambda item: item[0], reverse=True):
+        key = sentence.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        ranked.append(sentence)
+        if len(ranked) == max_items:
+            break
+
+    return ranked
+
+
+def get_research_query(company_name: str, role_title: str, job_description: str):
+    scope = " ".join(part for part in [company_name.strip(), role_title.strip()] if part).strip()
+    jd_focus = ", ".join(split_job_description_into_requirements(job_description, max_items=3))
+    query_parts = [
+        scope or "company role interview",
+        "company overview responsibilities interview questions expectations",
+        jd_focus
+    ]
+    return " | ".join(part for part in query_parts if part)
+
+
+def fetch_tavily_results(query: str, max_results=5):
+    if not TAVILY_API_KEY:
+        return []
+
+    payload = json.dumps({
+        "api_key": TAVILY_API_KEY,
+        "query": query,
+        "search_depth": "basic",
+        "max_results": max_results,
+        "include_answer": False,
+        "include_raw_content": False
+    }).encode("utf-8")
+
+    req = urllib_request.Request(
+        "https://api.tavily.com/search",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST"
+    )
+
+    try:
+        with urllib_request.urlopen(req, timeout=12) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except (urllib_error.URLError, urllib_error.HTTPError, TimeoutError, json.JSONDecodeError):
+        return []
+
+    results = []
+    for item in data.get("results", []):
+        title = normalize_text(item.get("title", ""))
+        content = normalize_text(item.get("content", ""))
+        url = item.get("url", "")
+        if content:
+            results.append({
+                "title": title,
+                "content": content,
+                "url": url
+            })
+    return results
+
+
+def run_company_research(company_name: str, role_title: str, job_description: str):
+    if WEB_RESEARCH_PROVIDER != "tavily" or not TAVILY_API_KEY:
+        return []
+
+    query = get_research_query(company_name, role_title, job_description)
+    return fetch_tavily_results(query)
+
+
+def summarize_research_results(results: list[dict], max_items=4):
+    lines = []
+    for item in results[:max_items]:
+        title = item.get("title") or "Research result"
+        content = truncate_text(item.get("content", ""), 260)
+        if content:
+            lines.append(f"{title}: {content}")
+    return lines
+
+
+def estimate_latency_summary(has_company_context: bool, has_interview_notes: bool, live_web_enabled: bool = False):
+    if live_web_enabled:
+        return (
+            "Estimated latency: resume retrieval 1-2s, JD analysis under 1s, live company/interview search 4-10s, "
+            "final synthesis under 1s. Cache company research to keep repeat runs fast."
+        )
+    if has_company_context or has_interview_notes:
+        return (
+            "Estimated latency: resume retrieval 1-2s, JD and pasted research analysis under 1s each, "
+            "final synthesis under 1s. This is much faster than live web search because research is already provided."
+        )
+    return (
+        "Estimated latency: current local flow should stay around 1-3s after resume upload. "
+        "If you later add live web search, expect the research step to dominate total latency."
+    )
+
+
+def get_research_status(auto_research_used: bool, live_results_count: int):
+    if auto_research_used and live_results_count > 0:
+        return f"Auto research used {live_results_count} live company result(s)."
+    if TAVILY_API_KEY:
+        return "Auto research is configured. If company name and role are provided, live company search will run."
+    return "Auto research is off. Add TAVILY_API_KEY to enable live company research."
+
+
+def build_supporting_signal_line(company_signals: list, interview_signals: list):
+    signals = []
+    if company_signals:
+        signals.append(f"company context: {company_signals[0]}")
+    if interview_signals:
+        signals.append(f"interview pattern: {interview_signals[0]}")
+    return " | ".join(signals)
+
+
+def select_supporting_evidence_for_requirement(requirement: str, resume_chunk: dict | None):
+    if not resume_chunk:
+        return "No direct resume evidence found."
+
+    keywords = extract_focus_keywords(requirement)
+    scored_lines = []
+    for line in split_into_bullets(resume_chunk["text"]):
+        overlap = count_keyword_overlap(keywords, line)
+        bonus = 1 if any(char.isdigit() for char in line) else 0
+        scored_lines.append((overlap + bonus, line))
+
+    scored_lines.sort(key=lambda item: item[0], reverse=True)
+    best_line = scored_lines[0][1] if scored_lines else resume_chunk["text"]
+
+    if count_keyword_overlap(keywords, best_line) == 0 and resume_chunk.get("section", "").lower() == "technical skills":
+        return "No direct resume evidence found."
+
+    return truncate_text(best_line, 220)
+
+
+def classify_requirement_match(requirement: str, score: float | None, resume_chunk: dict | None):
+    if score is None or resume_chunk is None:
+        return "gap"
+
+    keywords = extract_focus_keywords(requirement)
+    chunk_text = resume_chunk["text"]
+    keyword_overlap = count_keyword_overlap(keywords, chunk_text)
+    section = resume_chunk.get("section", "").lower()
+
+    if keyword_overlap == 0 and section == "technical skills":
+        return "gap"
+    if score <= STRONG_MATCH_DISTANCE_THRESHOLD and keyword_overlap >= 1:
+        return "strong"
+    if score <= 1.2 and keyword_overlap >= 1:
+        return "partial"
+    if score <= 1.0 and section in {"experience", "projects"}:
+        return "partial"
+    return "gap"
+
+
 def build_question_text(requirement: str, resume_chunk: dict | None, match_label: str):
     focus_area = get_requirement_focus(requirement)
     if resume_chunk is None or match_label == "gap":
@@ -493,7 +731,13 @@ def build_question_text(requirement: str, resume_chunk: dict | None, match_label
     )
 
 
-def generate_interview_questions(job_description: str):
+def generate_interview_prep(
+    job_description: str,
+    company_name: str = "",
+    role_title: str = "",
+    company_context: str = "",
+    interview_notes: str = ""
+):
     if not document_store["chunks"] or document_store["faiss_index"] is None:
         refresh_document_store_from_disk()
 
@@ -511,45 +755,69 @@ def generate_interview_questions(job_description: str):
             detail="Could not identify enough usable requirements from the job description."
         )
 
+    auto_research_requested = bool(company_name.strip() or role_title.strip())
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        live_research_future = executor.submit(
+            run_company_research,
+            company_name,
+            role_title,
+            normalized_jd
+        ) if auto_research_requested else None
+        company_future = executor.submit(extract_context_signals, company_context, 4)
+        interview_future = executor.submit(extract_context_signals, interview_notes, 4)
+        jd_focus_future = executor.submit(lambda items: [get_requirement_focus(item) for item in items], requirements)
+
+        pasted_company_signals = company_future.result()
+        interview_signals = interview_future.result()
+        requirement_focuses = jd_focus_future.result()
+        live_research_results = live_research_future.result() if live_research_future else []
+
+    auto_company_signals = summarize_research_results(live_research_results)
+    company_signals = auto_company_signals + pasted_company_signals
+    if len(company_signals) > 4:
+        company_signals = company_signals[:4]
+    auto_research_used = bool(live_research_results)
+
     questions = []
     matched_requirements = 0
     gap_requirements = 0
 
-    for requirement in requirements[:MAX_INTERVIEW_QUESTIONS]:
+    for requirement, focus_area in zip(requirements[:MAX_INTERVIEW_QUESTIONS], requirement_focuses[:MAX_INTERVIEW_QUESTIONS]):
         requirement_embedding = get_local_embeddings([requirement])
         distances, indices = document_store["faiss_index"].search(requirement_embedding, 1)
 
         resume_chunk = None
         score = None
-        match_label = "gap"
 
         idx = int(indices[0][0])
         if idx != -1:
             score = float(distances[0][0])
             resume_chunk = document_store["chunks"][idx]
-            if score <= STRONG_MATCH_DISTANCE_THRESHOLD:
-                match_label = "strong"
-                matched_requirements += 1
-            elif score <= PARTIAL_MATCH_DISTANCE_THRESHOLD:
-                match_label = "partial"
-                matched_requirements += 1
-            else:
-                gap_requirements += 1
+
+        match_label = classify_requirement_match(requirement, score, resume_chunk)
+        if match_label in {"strong", "partial"}:
+            matched_requirements += 1
         else:
             gap_requirements += 1
+            resume_chunk = None
 
-        if match_label == "gap":
-            resume_chunk = resume_chunk if score is not None and score <= NO_ANSWER_DISTANCE_THRESHOLD else None
+        supporting_signal = build_supporting_signal_line(company_signals, interview_signals)
+        question_text = build_question_text(requirement, resume_chunk, match_label)
+        if supporting_signal:
+            question_text = f"{question_text} Keep in mind this external signal: {supporting_signal}."
 
         questions.append({
             "requirement": requirement,
-            "focus_area": get_requirement_focus(requirement),
+            "focus_area": focus_area,
             "match_label": match_label,
             "score": round(score, 4) if score is not None else None,
-            "question": build_question_text(requirement, resume_chunk, match_label),
-            "resume_evidence": truncate_text(resume_chunk["text"], 240) if resume_chunk else "No strong matching resume evidence found.",
+            "question": question_text,
+            "resume_evidence": select_supporting_evidence_for_requirement(requirement, resume_chunk),
             "section": resume_chunk.get("section", "general") if resume_chunk else "gap",
-            "page_number": resume_chunk.get("page_number") if resume_chunk else None
+            "page_number": resume_chunk.get("page_number") if resume_chunk else None,
+            "company_signal": company_signals[0] if company_signals else None,
+            "interview_signal": interview_signals[0] if interview_signals else None
         })
 
     if gap_requirements == 0:
@@ -560,16 +828,31 @@ def generate_interview_questions(job_description: str):
             f"{gap_requirements} focus on likely interview gaps you should prepare to explain."
         )
 
+    if company_name or role_title:
+        scope_bits = [bit for bit in [company_name.strip(), role_title.strip()] if bit]
+        summary = f"{' | '.join(scope_bits)}: {summary}"
+
     return {
         "status": "success",
+        "company_name": company_name.strip() or None,
+        "role_title": role_title.strip() or None,
         "job_description": normalized_jd,
         "document_id": document_store["document_id"],
         "filename": document_store["filename"],
         "questions": questions,
         "matched_requirements": matched_requirements,
         "gap_requirements": gap_requirements,
-        "summary": summary
+        "summary": summary,
+        "company_signals": company_signals,
+        "interview_signals": interview_signals,
+        "latency_summary": estimate_latency_summary(bool(company_signals), bool(interview_signals), auto_research_used),
+        "auto_research_used": auto_research_used,
+        "research_status": get_research_status(auto_research_used, len(live_research_results))
     }
+
+
+def generate_interview_questions(job_description: str):
+    return generate_interview_prep(job_description=job_description)
 
 
 def generate_summary(question, top_matches):
@@ -725,17 +1008,36 @@ async def ask_api(question: str = Form(...)):
     return process_question(question)
 
 
-@app.post("/generate-interview-questions", response_model=InterviewQuestionsResponse)
-async def generate_interview_questions_api(job_description: str = Form(...)):
-    result = generate_interview_questions(job_description)
+@app.post("/generate-interview-questions", response_model=InterviewPrepResponse)
+async def generate_interview_questions_api(
+    job_description: str = Form(...),
+    company_name: str = Form(""),
+    role_title: str = Form(""),
+    company_context: str = Form(""),
+    interview_notes: str = Form("")
+):
+    result = generate_interview_prep(
+        job_description=job_description,
+        company_name=company_name,
+        role_title=role_title,
+        company_context=company_context,
+        interview_notes=interview_notes
+    )
     return {
         "status": result["status"],
+        "company_name": result["company_name"],
+        "role_title": result["role_title"],
         "job_description": result["job_description"],
         "document_id": result["document_id"],
         "filename": result["filename"],
         "questions": result["questions"],
         "matched_requirements": result["matched_requirements"],
-        "gap_requirements": result["gap_requirements"]
+        "gap_requirements": result["gap_requirements"],
+        "company_signals": result["company_signals"],
+        "interview_signals": result["interview_signals"],
+        "latency_summary": result["latency_summary"],
+        "auto_research_used": result["auto_research_used"],
+        "research_status": result["research_status"]
     }
 
 
@@ -792,22 +1094,48 @@ async def ask_ui(request: Request, question: str = Form(...)):
 
 
 @app.post("/generate-interview-questions-ui", response_class=HTMLResponse)
-async def generate_interview_questions_ui(request: Request, job_description: str = Form(...)):
+async def generate_interview_questions_ui(
+    request: Request,
+    job_description: str = Form(...),
+    company_name: str = Form(""),
+    role_title: str = Form(""),
+    company_context: str = Form(""),
+    interview_notes: str = Form("")
+):
     try:
-        result = generate_interview_questions(job_description)
+        result = generate_interview_prep(
+            job_description=job_description,
+            company_name=company_name,
+            role_title=role_title,
+            company_context=company_context,
+            interview_notes=interview_notes
+        )
         return render_home(
             request,
             filename=result["filename"],
             num_chunks=len(document_store["chunks"]),
             job_description=result["job_description"],
+            company_name=company_name,
+            role_title=role_title,
+            company_context=company_context,
+            interview_notes=interview_notes,
             interview_questions=result["questions"],
             interview_summary=result["summary"],
+            company_signals=result["company_signals"],
+            interview_signals=result["interview_signals"],
+            latency_summary=result["latency_summary"],
+            auto_research_used=result["auto_research_used"],
+            research_status=result["research_status"],
             page_title=f"Interview prep ready for {result['filename']}"
         )
     except HTTPException as e:
         return render_home(
             request,
             job_description=job_description,
+            company_name=company_name,
+            role_title=role_title,
+            company_context=company_context,
+            interview_notes=interview_notes,
             best_match=e.detail
         )
     

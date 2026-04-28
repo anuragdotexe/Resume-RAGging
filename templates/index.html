@@ -260,6 +260,21 @@
             line-height: 1.6;
         }
 
+        .insight-list {
+            display: grid;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .insight-item {
+            padding: 12px;
+            border-radius: 14px;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.72);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
         .section-label {
             text-transform: uppercase;
             letter-spacing: 0.12em;
@@ -338,11 +353,15 @@
                 </div>
 
                 <div class="card">
-                    <h2>Generate Personalized Interview Questions</h2>
-                    <div class="meta">Paste the target job description. The app will map it against the active resume and build questions around matches and likely gaps.</div>
+                    <h2>Generate Interview Prep Pack</h2>
+                    <div class="meta">Paste the JD, add the company and role, and optionally paste company research or interview notes from web search. The app will combine those signals with the active resume.</div>
                     <form action="/generate-interview-questions-ui" method="post">
+                        <input type="text" name="company_name" placeholder="Company name" value="{{ company_name }}" />
+                        <input type="text" name="role_title" placeholder="Role title" value="{{ role_title }}" />
                         <textarea name="job_description" placeholder="Paste the full job description here..." required>{{ job_description }}</textarea>
-                        <button type="submit">Generate Questions</button>
+                        <textarea name="company_context" placeholder="Paste company research notes, business context, team details, or product info from your web search...">{{ company_context }}</textarea>
+                        <textarea name="interview_notes" placeholder="Paste interview experiences, question patterns, or Glassdoor-style notes here...">{{ interview_notes }}</textarea>
+                        <button type="submit">Generate Prep Pack</button>
                     </form>
                 </div>
 
@@ -351,6 +370,19 @@
                     <div class="summary-box">
                         {{ interview_summary or "No interview questions generated yet." }}
                     </div>
+                    <div class="meta" style="margin-top: 10px;">{{ research_status }}</div>
+                    <div class="meta" style="margin-top: 10px;">{{ latency_summary }}</div>
+
+                    {% if company_signals or interview_signals %}
+                        <div class="insight-list">
+                            {% for signal in company_signals %}
+                                <div class="insight-item"><strong>Company signal:</strong> {{ signal }}</div>
+                            {% endfor %}
+                            {% for signal in interview_signals %}
+                                <div class="insight-item"><strong>Interview signal:</strong> {{ signal }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
 
                     {% if interview_questions %}
                         {% for item in interview_questions %}
@@ -369,10 +401,16 @@
                                 <div class="question-text">{{ item.question }}</div>
                                 <div class="supporting-copy"><strong>JD focus:</strong> {{ item.requirement }}</div>
                                 <div class="supporting-copy"><strong>Resume evidence:</strong> {{ item.resume_evidence }}</div>
+                                {% if item.company_signal %}
+                                    <div class="supporting-copy"><strong>Company context:</strong> {{ item.company_signal }}</div>
+                                {% endif %}
+                                {% if item.interview_signal %}
+                                    <div class="supporting-copy"><strong>Interview pattern:</strong> {{ item.interview_signal }}</div>
+                                {% endif %}
                             </div>
                         {% endfor %}
                     {% else %}
-                        <div class="result-box">Questions will appear here after you paste a JD and generate them.</div>
+                        <div class="result-box">Questions will appear here after you add a JD and generate the prep pack.</div>
                     {% endif %}
                 </div>
             </div>
