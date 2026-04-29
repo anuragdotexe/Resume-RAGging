@@ -392,6 +392,9 @@
                             <div class="question-card {{ item.match_label }}">
                                 <div class="pill-row">
                                     <div class="pill">Question {{ loop.index }}</div>
+                                    {% if item.question_source %}
+                                        <div class="pill">{{ item.question_source }}</div>
+                                    {% endif %}
                                     <div class="pill">{{ item.match_label|capitalize }} match</div>
                                     <div class="pill">{{ item.section }}</div>
                                     {% if item.page_number %}

@@ -794,10 +794,14 @@ def classify_requirement_match(requirement: str, score: float | None, resume_chu
     section = resume_chunk.get("section", "").lower()
 
     if section == "general":
-        if score > 0.95 or keyword_overlap < 2:
+        if score > 0.85 or keyword_overlap < 3:
             return "gap"
         return "partial"
     if keyword_overlap == 0 and section == "technical skills":
+        return "gap"
+    if section == "technical skills":
+        if score <= 0.9 and keyword_overlap >= 2:
+            return "partial"
         return "gap"
     if score <= STRONG_MATCH_DISTANCE_THRESHOLD and keyword_overlap >= 1:
         return "strong"
@@ -808,7 +812,7 @@ def classify_requirement_match(requirement: str, score: float | None, resume_chu
     return "gap"
 
 
-def build_question_text(requirement: str, resume_chunk: dict | None, match_label: str):
+def build_question_text(requirement: str, resume_chunk: dict | None, match_label: str, resume_evidence: str | None = None):
     focus_area = get_requirement_focus(requirement)
     if resume_chunk is None or match_label == "gap":
         return (
@@ -816,7 +820,7 @@ def build_question_text(requirement: str, resume_chunk: dict | None, match_label
             f"How would you explain your readiness, learning plan, or adjacent experience in an interview?"
         )
 
-    evidence = truncate_text(resume_chunk["text"], 140)
+    evidence = truncate_text(resume_evidence or resume_chunk["text"], 140)
     section = resume_chunk.get("section", "general")
 
     if match_label == "strong":
@@ -834,6 +838,36 @@ def build_question_text(requirement: str, resume_chunk: dict | None, match_label
         f"The role expects '{focus_area}'. Your resume shows related evidence in the {section} section: "
         f"'{evidence}'. How would you connect that past work to this requirement during an interview?"
     )
+
+
+def extract_interview_topics(interview_signals: list[str], max_items=2):
+    topics = []
+    seen = set()
+    for signal in interview_signals:
+        lowered = signal.lower()
+        if ":" in signal:
+            signal = signal.split(":", 1)[1]
+        fragments = re.split(r",|\.|;|\|", signal)
+        for fragment in fragments:
+            candidate = normalize_text(fragment)
+            if len(candidate) < 18:
+                continue
+            candidate_lower = candidate.lower()
+            if candidate_lower in seen:
+                continue
+            if any(token in candidate_lower for token in ["transformer", "rag", "prompt", "agent", "system design", "llm", "architecture", "evaluation"]):
+                seen.add(candidate_lower)
+                topics.append(candidate)
+                if len(topics) == max_items:
+                    return topics
+        if "interview question" in lowered and len(topics) < max_items:
+            fallback = truncate_text(signal, 120)
+            if fallback.lower() not in seen:
+                seen.add(fallback.lower())
+                topics.append(fallback)
+                if len(topics) == max_items:
+                    return topics
+    return topics
 
 
 def score_requirement_match(requirement: str, score: float, resume_chunk: dict):
@@ -875,6 +909,43 @@ def find_best_resume_match_for_requirement(requirement: str, top_k: int = 5):
     candidates.sort(key=lambda item: item["match_strength"], reverse=True)
     best = candidates[0]
     return best["chunk"], best["score"]
+
+
+def build_interview_pattern_questions(interview_signals: list[str], company_name: str, role_title: str):
+    questions = []
+    topics = extract_interview_topics(interview_signals, max_items=2)
+
+    for topic in topics:
+        resume_chunk, score = find_best_resume_match_for_requirement(topic)
+        match_label = classify_requirement_match(topic, score, resume_chunk)
+        evidence = select_supporting_evidence_for_requirement(topic, resume_chunk if match_label != "gap" else None)
+
+        if match_label == "gap":
+            question_text = (
+                f"Interview prep sources for {company_name or 'this company'} suggest focus on '{truncate_text(topic, 70)}'. "
+                f"What answer would you give if asked this for a {role_title or 'target role'} interview, and how would you bridge any missing direct experience?"
+            )
+            resume_chunk = None
+        else:
+            section = resume_chunk.get("section", "general") if resume_chunk else "general"
+            question_text = (
+                f"Interview prep sources for {company_name or 'this company'} suggest focus on '{truncate_text(topic, 70)}'. "
+                f"Using your {section} evidence '{truncate_text(evidence, 120)}', how would you answer this in a {role_title or 'target role'} interview?"
+            )
+
+        questions.append({
+            "requirement": topic,
+            "focus_area": truncate_text(topic, 70),
+            "match_label": match_label,
+            "score": round(score, 4) if score is not None else None,
+            "question": question_text,
+            "resume_evidence": evidence,
+            "section": resume_chunk.get("section", "gap") if resume_chunk else "gap",
+            "page_number": resume_chunk.get("page_number") if resume_chunk else None,
+            "question_source": "interview pattern"
+        })
+
+    return questions
 
 
 def generate_interview_prep(
@@ -942,8 +1013,10 @@ def generate_interview_prep(
     questions = []
     matched_requirements = 0
     gap_requirements = 0
+    role_pattern_slots = min(2, len(extract_interview_topics(interview_signals, max_items=2)))
+    jd_question_limit = max(1, MAX_INTERVIEW_QUESTIONS - role_pattern_slots)
 
-    for requirement, focus_area in zip(requirements[:MAX_INTERVIEW_QUESTIONS], requirement_focuses[:MAX_INTERVIEW_QUESTIONS]):
+    for requirement, focus_area in zip(requirements[:jd_question_limit], requirement_focuses[:jd_question_limit]):
         resume_chunk, score = find_best_resume_match_for_requirement(requirement)
 
         match_label = classify_requirement_match(requirement, score, resume_chunk)
@@ -953,7 +1026,8 @@ def generate_interview_prep(
             gap_requirements += 1
             resume_chunk = None
 
-        question_text = build_question_text(requirement, resume_chunk, match_label)
+        resume_evidence = select_supporting_evidence_for_requirement(requirement, resume_chunk)
+        question_text = build_question_text(requirement, resume_chunk, match_label, resume_evidence)
 
         questions.append({
             "requirement": requirement,
@@ -961,12 +1035,19 @@ def generate_interview_prep(
             "match_label": match_label,
             "score": round(score, 4) if score is not None else None,
             "question": question_text,
-            "resume_evidence": select_supporting_evidence_for_requirement(requirement, resume_chunk),
+            "resume_evidence": resume_evidence,
             "section": resume_chunk.get("section", "general") if resume_chunk else "gap",
             "page_number": resume_chunk.get("page_number") if resume_chunk else None,
-            "company_signal": company_signals[0] if company_signals else None,
-            "interview_signal": interview_signals[0] if interview_signals else None
+            "question_source": "jd + resume"
         })
+
+    pattern_questions = build_interview_pattern_questions(interview_signals, company_name.strip(), role_title.strip())
+    for item in pattern_questions:
+        if item["match_label"] in {"strong", "partial"}:
+            matched_requirements += 1
+        else:
+            gap_requirements += 1
+    questions.extend(pattern_questions[:role_pattern_slots])
 
     if gap_requirements == 0:
         summary = "All generated questions are tied to clear resume-to-JD overlaps."
