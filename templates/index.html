@@ -7,82 +7,89 @@
 
     <style>
         :root {
-            --bg: #f4efe6;
-            --ink: #1f1c16;
-            --muted: #645b4c;
-            --panel: rgba(255, 252, 247, 0.92);
-            --panel-strong: #fffaf1;
-            --line: rgba(62, 47, 27, 0.14);
-            --accent: #a64b2a;
-            --accent-dark: #7f371d;
-            --accent-soft: #f6d7c3;
-            --success-soft: #e7f4eb;
-            --warning-soft: #fff0cc;
-            --gap-soft: #f9dfda;
-            --shadow: 0 24px 60px rgba(85, 60, 24, 0.12);
+            --bg: #f4f8ff;
+            --bg-accent: #eaf2ff;
+            --ink: #11213a;
+            --muted: #5a6b88;
+            --panel: rgba(255, 255, 255, 0.96);
+            --panel-strong: #ffffff;
+            --line: rgba(46, 91, 186, 0.14);
+            --accent: #2563eb;
+            --accent-dark: #1d4ed8;
+            --accent-soft: #dbeafe;
+            --success-soft: #e7f7ef;
+            --warning-soft: #fff4db;
+            --adjacent-soft: #edf4ff;
+            --gap-soft: #fdecec;
+            --shadow: 0 20px 45px rgba(37, 99, 235, 0.10);
+            --shadow-soft: 0 12px 24px rgba(15, 23, 42, 0.06);
         }
 
         body {
-            font-family: "Avenir Next", "Segoe UI", sans-serif;
+            font-family: "SF Pro Display", "Segoe UI", sans-serif;
             background:
-                radial-gradient(circle at top left, rgba(255, 255, 255, 0.75), transparent 34%),
-                linear-gradient(135deg, #f7f1e8 0%, #efe2d0 52%, #ead8be 100%);
+                radial-gradient(circle at top left, rgba(219, 234, 254, 0.75), transparent 28%),
+                radial-gradient(circle at bottom right, rgba(191, 219, 254, 0.50), transparent 24%),
+                linear-gradient(180deg, #f9fbff 0%, #f4f8ff 100%);
             margin: 0;
-            padding: 24px;
+            padding: 32px 24px 48px;
             color: var(--ink);
         }
 
         .container {
-            max-width: 1120px;
+            max-width: 1280px;
             margin: auto;
         }
 
         .hero {
-            padding: 28px;
-            border-radius: 26px;
+            padding: 32px;
+            border-radius: 28px;
             background:
-                linear-gradient(135deg, rgba(255, 250, 241, 0.96), rgba(246, 228, 208, 0.94)),
+                linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(239, 246, 255, 0.96)),
                 var(--panel);
             box-shadow: var(--shadow);
-            border: 1px solid rgba(90, 61, 21, 0.1);
-            margin-bottom: 18px;
+            border: 1px solid rgba(37, 99, 235, 0.10);
+            margin-bottom: 20px;
         }
 
         .eyebrow {
             text-transform: uppercase;
             letter-spacing: 0.16em;
             font-size: 11px;
-            color: var(--accent-dark);
+            color: var(--accent);
             margin-bottom: 10px;
             font-weight: 700;
         }
 
         .card {
             background: var(--panel);
-            border-radius: 22px;
-            padding: 20px;
-            margin-bottom: 16px;
-            box-shadow: var(--shadow);
-            border: 1px solid rgba(90, 61, 21, 0.08);
+            border-radius: 24px;
+            padding: 22px;
+            margin-bottom: 18px;
+            box-shadow: var(--shadow-soft);
+            border: 1px solid rgba(37, 99, 235, 0.10);
         }
 
         h1 {
             margin-top: 0;
-            margin-bottom: 10px;
-            font-size: clamp(32px, 5vw, 52px);
-            line-height: 0.98;
-            font-family: Georgia, "Times New Roman", serif;
-            max-width: 10ch;
+            margin-bottom: 12px;
+            font-size: clamp(34px, 5vw, 54px);
+            line-height: 1;
+            font-family: "SF Pro Display", "Segoe UI", sans-serif;
+            font-weight: 800;
+            max-width: 11ch;
+            letter-spacing: -0.04em;
         }
 
         h2 {
-            font-size: 19px;
-            margin-bottom: 12px;
+            font-size: 22px;
+            margin-bottom: 14px;
             margin-top: 0;
+            letter-spacing: -0.02em;
         }
 
         .hero-copy {
-            max-width: 720px;
+            max-width: 760px;
             color: var(--muted);
             line-height: 1.6;
             font-size: 15px;
@@ -92,11 +99,11 @@
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            margin-top: 14px;
-            padding: 10px 14px;
+            margin-top: 18px;
+            padding: 12px 16px;
             border-radius: 999px;
-            background: rgba(255, 255, 255, 0.66);
-            border: 1px solid rgba(90, 61, 21, 0.08);
+            background: rgba(219, 234, 254, 0.55);
+            border: 1px solid rgba(37, 99, 235, 0.12);
             color: var(--accent-dark);
             font-size: 13px;
             font-weight: 600;
@@ -112,38 +119,85 @@
 
         .grid {
             display: grid;
-            grid-template-columns: 1.05fr 0.95fr;
-            gap: 16px;
+            grid-template-columns: minmax(0, 1.08fr) minmax(380px, 0.92fr);
+            gap: 20px;
             align-items: start;
+        }
+
+        .hero-grid {
+            display: grid;
+            grid-template-columns: 1.35fr 0.9fr;
+            gap: 22px;
+            align-items: stretch;
+        }
+
+        .hero-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .metric-card {
+            padding: 16px;
+            border-radius: 20px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(239, 246, 255, 0.92));
+            border: 1px solid rgba(37, 99, 235, 0.10);
+        }
+
+        .metric-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--accent);
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        .metric-value {
+            font-size: 28px;
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: -0.03em;
         }
 
         form {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 12px;
         }
 
         input[type="file"],
         input[type="text"],
         select,
         textarea {
-            padding: 10px;
+            padding: 13px 14px;
             border: 1px solid var(--line);
-            border-radius: 14px;
+            border-radius: 16px;
             font-size: 14px;
-            background: rgba(255, 255, 255, 0.9);
+            background: rgba(255, 255, 255, 0.98);
             color: var(--ink);
+            transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+        }
+
+        input[type="file"]:focus,
+        input[type="text"]:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: rgba(37, 99, 235, 0.35);
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
+            background: #ffffff;
         }
 
         textarea {
-            min-height: 210px;
+            min-height: 170px;
             resize: vertical;
-            line-height: 1.5;
+            line-height: 1.55;
         }
 
         button {
             width: fit-content;
-            padding: 10px 18px;
+            padding: 12px 18px;
             border: none;
             border-radius: 999px;
             background: var(--accent);
@@ -152,70 +206,143 @@
             cursor: pointer;
             font-weight: 700;
             letter-spacing: 0.01em;
-            transition: transform 140ms ease, background 140ms ease;
+            transition: transform 140ms ease, background 140ms ease, box-shadow 140ms ease;
+            box-shadow: 0 10px 18px rgba(37, 99, 235, 0.18);
         }
 
         button:hover {
             background: var(--accent-dark);
             transform: translateY(-1px);
+            box-shadow: 0 14px 24px rgba(37, 99, 235, 0.24);
         }
 
         .meta {
             font-size: 13px;
             color: var(--muted);
             margin-bottom: 8px;
+            line-height: 1.5;
         }
 
         .result-box {
-            background: rgba(255, 255, 255, 0.72);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 255, 0.95));
             border: 1px solid var(--line);
-            border-radius: 14px;
-            padding: 12px;
+            border-radius: 16px;
+            padding: 14px;
             white-space: pre-wrap;
-            line-height: 1.4;
+            line-height: 1.55;
             font-size: 13px;
         }
 
         .summary-box {
-            background: linear-gradient(180deg, rgba(255, 243, 233, 0.92), rgba(255, 251, 245, 0.9));
-            border: 1px solid rgba(166, 75, 42, 0.18);
-            border-radius: 16px;
-            padding: 12px;
-            line-height: 1.5;
-            font-size: 13px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(239, 246, 255, 0.92));
+            border: 1px solid rgba(37, 99, 235, 0.12);
+            border-radius: 18px;
+            padding: 16px;
+            line-height: 1.6;
+            font-size: 14px;
         }
 
         .match {
-            margin-top: 10px;
-            padding: 12px;
+            margin-top: 12px;
+            padding: 14px;
             border: 1px solid var(--line);
-            border-radius: 16px;
-            background: rgba(255, 255, 255, 0.84);
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.95);
         }
 
         .score {
             font-size: 12px;
             color: var(--muted);
-            margin-bottom: 6px;
+            margin-bottom: 8px;
         }
 
         .panel-stack {
             display: grid;
-            gap: 16px;
+            gap: 18px;
         }
 
         .small-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 16px;
+            gap: 14px;
+        }
+
+        .input-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .form-note {
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.5;
+            margin-top: -4px;
+        }
+
+        .notice {
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(239, 246, 255, 0.95), rgba(248, 250, 255, 0.96));
+            border: 1px solid var(--line);
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--muted);
+        }
+
+        .compact-list {
+            display: grid;
+            gap: 10px;
+            margin-top: 14px;
+        }
+
+        .compact-item {
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid rgba(37, 99, 235, 0.10);
+        }
+
+        .compact-item strong {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+            color: var(--ink);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .stats-grid.three {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .stats-grid.two {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .stats-card {
+            padding: 16px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.96);
+            border: 1px solid var(--line);
+        }
+
+        .stats-card .metric-value {
+            font-size: 22px;
         }
 
         .question-card {
-            padding: 16px;
-            border-radius: 18px;
+            padding: 18px;
+            border-radius: 22px;
             border: 1px solid var(--line);
             background: var(--panel-strong);
-            margin-top: 12px;
+            margin-top: 14px;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
         }
 
         .question-card.strong {
@@ -224,6 +351,10 @@
 
         .question-card.partial {
             background: var(--warning-soft);
+        }
+
+        .question-card.adjacent {
+            background: var(--adjacent-soft);
         }
 
         .question-card.gap {
@@ -241,56 +372,104 @@
             display: inline-flex;
             align-items: center;
             border-radius: 999px;
-            padding: 6px 10px;
+            padding: 7px 11px;
             font-size: 12px;
             font-weight: 700;
-            background: rgba(255, 255, 255, 0.76);
-            border: 1px solid rgba(90, 61, 21, 0.08);
+            background: rgba(255, 255, 255, 0.98);
+            border: 1px solid rgba(37, 99, 235, 0.10);
+            color: var(--accent-dark);
         }
 
         .question-text {
-            font-size: 15px;
-            line-height: 1.6;
-            margin-bottom: 14px;
+            font-size: 16px;
+            line-height: 1.65;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+
+        .question-main {
+            display: grid;
+            gap: 10px;
         }
 
         .supporting-copy {
             font-size: 13px;
             color: var(--muted);
-            line-height: 1.6;
+            line-height: 1.65;
+            margin-top: 6px;
+        }
+
+        .trace-line {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px dashed rgba(37, 99, 235, 0.16);
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.5;
         }
 
         .insight-list {
             display: grid;
-            gap: 10px;
+            gap: 12px;
             margin-top: 12px;
         }
 
         .insight-item {
-            padding: 12px;
-            border-radius: 14px;
+            padding: 14px;
+            border-radius: 18px;
             border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.72);
+            background: rgba(255, 255, 255, 0.96);
             font-size: 13px;
-            line-height: 1.5;
+            line-height: 1.6;
+        }
+
+        .group-header {
+            margin-top: 22px;
+            margin-bottom: 10px;
+        }
+
+        .group-header h3 {
+            margin: 0 0 4px 0;
+            font-size: 18px;
+            letter-spacing: -0.02em;
+        }
+
+        .group-header p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .split-section {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .subsection-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--ink);
+            margin-bottom: 8px;
         }
 
         .section-label {
             text-transform: uppercase;
             letter-spacing: 0.12em;
             font-size: 11px;
-            color: var(--accent-dark);
+            color: var(--accent);
             margin-bottom: 10px;
             font-weight: 700;
         }
 
         @media (max-width: 600px) {
             body {
-                padding: 10px;
+                padding: 12px;
             }
 
             .card {
-                padding: 12px;
+                padding: 16px;
             }
 
             input, button, select, textarea {
@@ -300,7 +479,14 @@
 
         @media (max-width: 900px) {
             .grid,
-            .small-grid {
+            .small-grid,
+            .hero-grid,
+            .input-grid,
+            .stats-grid,
+            .stats-grid.two,
+            .stats-grid.three,
+            .hero-metrics,
+            .split-section {
                 grid-template-columns: 1fr;
             }
 
@@ -315,12 +501,33 @@
     <div class="container">
 
         <div class="hero">
-            <div class="eyebrow">Interview Prep Engine</div>
-            <h1>Resume RAGing</h1>
-            <div class="hero-copy">
-                Upload the candidate's resume, paste the target job description, and generate personalized interview questions based on where the resume aligns with the role and where it looks thin.
+            <div class="hero-grid">
+                <div>
+                    <div class="eyebrow">Interview Prep Engine</div>
+                    <h1>Resume RAGing</h1>
+                    <div class="hero-copy">
+                        Create a polished interview preparation pack from a resume, a concise role brief, and live role-specific research. The experience is designed for candidates, recruiters, and hiring teams to review with confidence.
+                    </div>
+                    <div class="hero-status">{{ page_title }}</div>
+                </div>
+                <div class="hero-metrics">
+                    <div class="metric-card">
+                        <div class="metric-label">Active Resume</div>
+                        <div class="metric-value">{{ num_chunks if num_chunks is not none else 0 }}</div>
+                        <div class="form-note">indexed chunks</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Questions</div>
+                        <div class="metric-value">{{ question_metrics.total }}</div>
+                        <div class="form-note">in current prep pack</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Role Mode</div>
+                        <div class="metric-value" style="font-size: 16px; line-height: 1.2;">{{ role_mode_label }}</div>
+                        <div class="form-note">search + coaching preset</div>
+                    </div>
+                </div>
             </div>
-            <div class="hero-status">{{ page_title }}</div>
         </div>
 
         <div class="grid">
@@ -353,12 +560,40 @@
                 </div>
 
                 <div class="card">
-                    <h2>Generate Interview Prep Pack</h2>
-                    <div class="meta">Paste the JD, add the company and role, and optionally paste company research or interview notes from web search. The app will combine those signals with the active resume.</div>
+                    <h2>Build Interview Pack</h2>
+                    <div class="compact-list">
+                        <div class="compact-item">
+                            <strong>Target role</strong>
+                            Define the company, title, and role mode so search and coaching align with the interview loop you want to prepare for.
+                        </div>
+                        <div class="compact-item">
+                            <strong>Role brief</strong>
+                            Use a concise, rewritten summary of the JD instead of pasting the full posting. Keep it under 200 characters.
+                        </div>
+                        <div class="compact-item">
+                            <strong>Optional context</strong>
+                            Add company notes or interview experiences only when you want to enrich or override the live research.
+                        </div>
+                    </div>
                     <form action="/generate-interview-questions-ui" method="post">
-                        <input type="text" name="company_name" placeholder="Company name" value="{{ company_name }}" />
-                        <input type="text" name="role_title" placeholder="Role title" value="{{ role_title }}" />
-                        <textarea name="job_description" placeholder="Paste the full job description here..." required>{{ job_description }}</textarea>
+                        <div class="input-grid">
+                            <input type="text" name="company_name" placeholder="Company name" value="{{ company_name }}" />
+                            <input type="text" name="role_title" placeholder="Role title" value="{{ role_title }}" />
+                        </div>
+                        <select name="role_mode">
+                            <option value="auto" {% if role_mode == "auto" %}selected{% endif %}>Auto detect role mode</option>
+                            <option value="sde" {% if role_mode == "sde" %}selected{% endif %}>SDE</option>
+                            <option value="ai_ml" {% if role_mode == "ai_ml" %}selected{% endif %}>AI / ML</option>
+                            <option value="data" {% if role_mode == "data" %}selected{% endif %}>Data</option>
+                            <option value="product" {% if role_mode == "product" %}selected{% endif %}>Product</option>
+                        </select>
+                        <div class="notice">
+                            <strong>Role brief</strong><br />
+                            Summarize the JD in one compact statement.
+                            Example: <em>Applied AI Engineer who productionizes LLM systems, evaluation pipelines, and AI workflows.</em>
+                        </div>
+                        <textarea name="job_description" placeholder="Paste a short role brief here (max 200 characters)..." maxlength="200" required>{{ job_description }}</textarea>
+                        <div class="form-note">Current limit: 200 characters. Condense long job descriptions into a short hiring brief before submitting.</div>
                         <textarea name="company_context" placeholder="Paste company research notes, business context, team details, or product info from your web search...">{{ company_context }}</textarea>
                         <textarea name="interview_notes" placeholder="Paste interview experiences, question patterns, or Glassdoor-style notes here...">{{ interview_notes }}</textarea>
                         <button type="submit">Generate Prep Pack</button>
@@ -366,64 +601,139 @@
                 </div>
 
                 <div class="card">
-                    <h2>Interview Question Pack</h2>
+                    <h2>Interview Pack Summary</h2>
                     <div class="summary-box">
                         {{ interview_summary or "No interview questions generated yet." }}
                     </div>
-                    <div class="meta" style="margin-top: 10px;">{{ research_status }}</div>
-                    {% if research_query %}
-                        <div class="meta">Research query: {{ research_query }}</div>
-                    {% endif %}
-                    <div class="meta" style="margin-top: 10px;">{{ latency_summary }}</div>
+                    <div class="stats-grid">
+                        <div class="stats-card">
+                            <div class="metric-label">Total Questions</div>
+                            <div class="metric-value">{{ question_metrics.total }}</div>
+                        </div>
+                        <div class="stats-card">
+                            <div class="metric-label">Aligned</div>
+                            <div class="metric-value">{{ question_metrics.strong + question_metrics.partial + question_metrics.adjacent }}</div>
+                        </div>
+                        <div class="stats-card">
+                            <div class="metric-label">Direct Gaps</div>
+                            <div class="metric-value">{{ question_metrics.gap }}</div>
+                        </div>
+                        <div class="stats-card">
+                            <div class="metric-label">Role Mode</div>
+                            <div class="metric-value" style="font-size: 16px; line-height: 1.2;">{{ role_mode_label }}</div>
+                        </div>
+                    </div>
+                    <div class="stats-grid two">
+                        <div class="stats-card">
+                            <div class="metric-label">Personalized Questions</div>
+                            <div class="metric-value">{{ question_metrics.jd_resume }}</div>
+                        </div>
+                        <div class="stats-card">
+                            <div class="metric-label">Role Pattern Questions</div>
+                            <div class="metric-value">{{ question_metrics.interview_pattern }}</div>
+                        </div>
+                    </div>
+                    <div class="notice" style="margin-top: 14px;">
+                        <strong>Research status:</strong> {{ research_status }}<br />
+                        <strong>Latency:</strong> {{ latency_summary }}
+                        {% if research_query %}
+                            <br /><strong>Search query:</strong> {{ research_query }}
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Research Highlights</h2>
 
                     {% if company_signals or interview_signals %}
-                        <div class="insight-list">
-                            {% for signal in company_signals %}
-                                <div class="insight-item"><strong>Company signal:</strong> {{ signal }}</div>
-                            {% endfor %}
-                            {% for signal in interview_signals %}
-                                <div class="insight-item"><strong>Interview signal:</strong> {{ signal }}</div>
-                            {% endfor %}
+                        <div class="split-section">
+                            <div>
+                                <div class="subsection-title">Company Context</div>
+                                {% if company_signals %}
+                                    <div class="insight-list">
+                                        {% for signal in company_signals %}
+                                            <div class="insight-item">{{ signal }}</div>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <div class="result-box">No company-specific context surfaced for this role yet.</div>
+                                {% endif %}
+                            </div>
+                            <div>
+                                <div class="subsection-title">Interview Patterns</div>
+                                {% if interview_signals %}
+                                    <div class="insight-list">
+                                        {% for signal in interview_signals %}
+                                            <div class="insight-item">{{ signal }}</div>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <div class="result-box">No interview-pattern signals surfaced for this role yet.</div>
+                                {% endif %}
+                            </div>
                         </div>
+                    {% else %}
+                        <div class="result-box">No research highlights yet. Generate a prep pack to see company context and interview-pattern signals.</div>
                     {% endif %}
+                </div>
 
-                    {% if interview_questions %}
-                        {% for item in interview_questions %}
-                            <div class="question-card {{ item.match_label }}">
+                <div class="card">
+                    <h2>Interview Question Pack</h2>
+                    {% if question_groups %}
+                        {% for group in question_groups %}
+                            <div class="group-header">
+                                <h3>{{ group["title"] }}</h3>
+                                <p>{{ group["description"] }}</p>
+                            </div>
+                            {% for item in group["items"] %}
+                                <div class="question-card {{ item.match_label }}">
                                 <div class="pill-row">
-                                    <div class="pill">Question {{ loop.index }}</div>
-                                    {% if item.question_source %}
-                                        <div class="pill">{{ item.question_source }}</div>
+                                    {% if item.question_source == "jd + resume" %}
+                                        <div class="pill">Personalized</div>
+                                    {% elif item.question_source == "interview pattern" %}
+                                        <div class="pill">Commonly Asked</div>
                                     {% endif %}
-                                    <div class="pill">{{ item.match_label|capitalize }} match</div>
-                                    <div class="pill">{{ item.section }}</div>
-                                    {% if item.page_number %}
-                                        <div class="pill">Page {{ item.page_number }}</div>
-                                    {% endif %}
-                                    {% if item.score is not none %}
-                                        <div class="pill">Distance {{ item.score }}</div>
+                                    <div class="pill">{{ item.match_label|capitalize }}</div>
+                                    {% if item.question_category %}
+                                        <div class="pill">{{ item.question_category }}</div>
                                     {% endif %}
                                 </div>
-                                <div class="question-text">{{ item.question }}</div>
-                                <div class="supporting-copy"><strong>JD focus:</strong> {{ item.requirement }}</div>
-                                <div class="supporting-copy"><strong>Resume evidence:</strong> {{ item.resume_evidence }}</div>
-                            </div>
+                                <div class="question-main">
+                                    <div class="question-text">{{ item.question }}</div>
+                                    <div class="supporting-copy"><strong>Focus area:</strong> {{ item.requirement }}</div>
+                                    <div class="supporting-copy"><strong>Resume anchor:</strong> {{ item.resume_evidence }}</div>
+                                    {% if item.why_asked %}
+                                        <div class="supporting-copy"><strong>Why this matters:</strong> {{ item.why_asked }}</div>
+                                    {% endif %}
+                                    {% if item.prep_tip %}
+                                        <div class="supporting-copy"><strong>How to answer it:</strong> {{ item.prep_tip }}</div>
+                                    {% endif %}
+                                    <div class="trace-line">
+                                        <strong>Evidence trace:</strong>
+                                        Section {{ item.section }}
+                                        {% if item.page_number %}| Page {{ item.page_number }}{% endif %}
+                                        {% if item.score is not none %}| Distance {{ item.score }}{% endif %}
+                                    </div>
+                                </div>
+                                </div>
+                            {% endfor %}
                         {% endfor %}
                     {% else %}
-                        <div class="result-box">Questions will appear here after you add a JD and generate the prep pack.</div>
+                        <div class="result-box">Questions will appear here after you define the target role and generate the prep pack.</div>
                     {% endif %}
                 </div>
             </div>
 
             <div class="panel-stack">
                 <div class="card">
-                    <h2>Status</h2>
+                    <h2>Resume Status</h2>
                     <div class="meta"><strong>Active Resume:</strong> {{ filename or "No file loaded yet" }}</div>
                     <div class="meta"><strong>Chunks Indexed:</strong> {{ num_chunks if num_chunks is not none else "-" }}</div>
                 </div>
 
                 <div class="card">
                     <h2>Resume Q&amp;A</h2>
+                    <div class="meta">Ask a direct question about the active resume and inspect the retrieved evidence below.</div>
                     <form action="/ask-ui" method="post">
                         <input type="text" name="question" placeholder="Ask something like: Python and SQL skills" required />
                         <button type="submit">Ask Resume</button>
@@ -439,6 +749,7 @@
 
                 <div class="card">
                     <h2>Top Evidence</h2>
+                    <div class="meta">Best supporting snippet from the current resume Q&amp;A search.</div>
                     <div class="result-box">
                         {{ best_match or "No result yet" }}
                     </div>
@@ -446,6 +757,7 @@
 
                 <div class="card">
                     <h2>Retrieved Chunks</h2>
+                    <div class="meta">Technical trace for the active resume Q&amp;A request. This stays visible so your audience can inspect retrieval quality.</div>
 
                     {% if top_matches %}
                         {% for match in top_matches %}

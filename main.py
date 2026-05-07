@@ -33,6 +33,36 @@ MAX_INTERVIEW_QUESTIONS = 6
 EXPERIENCE_SECTION_BOOST = 0.22
 SKILLS_SECTION_PENALTY = 0.12
 GENERAL_SECTION_PENALTY = 0.28
+QUESTION_SIMILARITY_WORD_THRESHOLD = 4
+MAX_JOB_DESCRIPTION_CHARS = 200
+
+ROLE_MODE_CONFIG = {
+    "auto": {
+        "label": "Auto detect",
+        "search_terms": "role interview questions responsibilities",
+        "priority_topics": []
+    },
+    "sde": {
+        "label": "SDE",
+        "search_terms": "software engineer coding dsa system design behavioral interview questions",
+        "priority_topics": ["data structures", "algorithms", "system design", "backend", "scalability", "behavioral"]
+    },
+    "ai_ml": {
+        "label": "AI / ML",
+        "search_terms": "applied ai machine learning llm rag agent system design prompt engineering interview questions",
+        "priority_topics": ["llms", "rag", "agents", "prompt engineering", "evaluation", "model performance"]
+    },
+    "data": {
+        "label": "Data",
+        "search_terms": "analytics sql dashboards experimentation stakeholder communication interview questions",
+        "priority_topics": ["sql", "analytics", "dashboards", "experimentation", "metrics", "stakeholder communication"]
+    },
+    "product": {
+        "label": "Product",
+        "search_terms": "product sense execution metrics stakeholder behavioral interview questions",
+        "priority_topics": ["product sense", "execution", "metrics", "prioritization", "stakeholders", "behavioral"]
+    }
+}
 
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
@@ -75,6 +105,7 @@ class InterviewPrepResponse(BaseModel):
     status: str
     company_name: str | None = None
     role_title: str | None = None
+    role_mode: str
     job_description: str
     document_id: str | None = None
     filename: str | None = None
@@ -331,6 +362,7 @@ def render_home(request: Request, **overrides):
         "page_title": build_page_title(document_store["filename"]),
         "company_name": "",
         "role_title": "",
+        "role_mode": "auto",
         "company_context": "",
         "interview_notes": "",
         "company_signals": [],
@@ -342,7 +374,18 @@ def render_home(request: Request, **overrides):
             if TAVILY_API_KEY else
             "Auto research is off. Add TAVILY_API_KEY to enable live company research."
         ),
-        "research_query": None
+        "research_query": None,
+        "question_metrics": {
+            "total": 0,
+            "strong": 0,
+            "partial": 0,
+            "adjacent": 0,
+            "gap": 0,
+            "jd_resume": 0,
+            "interview_pattern": 0
+        },
+        "question_groups": [],
+        "role_mode_label": "Auto detect"
     }
     context.update(overrides)
     return templates.TemplateResponse(request, "index.html", context)
@@ -608,12 +651,14 @@ def extract_context_signals(text: str, max_items=4):
     return ranked
 
 
-def get_research_query(company_name: str, role_title: str, job_description: str):
+def get_research_query(company_name: str, role_title: str, job_description: str, role_mode: str):
     normalized_company = company_name.strip().replace("Open AI", "OpenAI")
     scope = " ".join(part for part in [normalized_company, role_title.strip()] if part).strip()
     jd_focus = ", ".join(split_job_description_into_requirements(job_description, max_items=3))
+    role_config = get_role_mode_config(role_mode)
     query_parts = [
         scope or "company role interview",
+        role_config["search_terms"],
         "company overview responsibilities interview questions expectations",
         jd_focus
     ]
@@ -696,15 +741,15 @@ def fetch_tavily_results(query: str, max_results=5):
     }
 
 
-def run_company_research(company_name: str, role_title: str, job_description: str):
+def run_company_research(company_name: str, role_title: str, job_description: str, role_mode: str):
     if WEB_RESEARCH_PROVIDER != "tavily" or not TAVILY_API_KEY:
         return {
-            "query": get_research_query(company_name, role_title, job_description),
+            "query": get_research_query(company_name, role_title, job_description, role_mode),
             "results": [],
             "status": "Auto research is off. Add TAVILY_API_KEY to enable live company research."
         }
 
-    query = get_research_query(company_name, role_title, job_description)
+    query = get_research_query(company_name, role_title, job_description, role_mode)
     payload = fetch_tavily_results(query)
     payload["query"] = query
     return payload
@@ -796,19 +841,19 @@ def classify_requirement_match(requirement: str, score: float | None, resume_chu
     if section == "general":
         if score > 0.85 or keyword_overlap < 3:
             return "gap"
-        return "partial"
+        return "adjacent"
     if keyword_overlap == 0 and section == "technical skills":
         return "gap"
     if section == "technical skills":
         if score <= 0.9 and keyword_overlap >= 2:
-            return "partial"
+            return "adjacent"
         return "gap"
     if score <= STRONG_MATCH_DISTANCE_THRESHOLD and keyword_overlap >= 1:
         return "strong"
     if score <= 1.2 and keyword_overlap >= 1:
         return "partial"
     if score <= 1.0 and section in {"experience", "projects"}:
-        return "partial"
+        return "adjacent"
     return "gap"
 
 
@@ -834,10 +879,161 @@ def build_question_text(requirement: str, resume_chunk: dict | None, match_label
             f"'{evidence}'. Can you walk through that example, the impact you created, and how it fits this role?"
         )
 
+    if match_label == "adjacent":
+        return (
+            f"The role expects '{focus_area}'. Your resume shows adjacent evidence in the {section} section: "
+            f"'{evidence}'. How would you position that experience as relevant, and where would you be honest about the gap?"
+        )
+
     return (
         f"The role expects '{focus_area}'. Your resume shows related evidence in the {section} section: "
         f"'{evidence}'. How would you connect that past work to this requirement during an interview?"
     )
+
+
+def normalize_topic_label(text: str):
+    candidate = normalize_text(text)
+    candidate = re.sub(r"^[A-Za-z0-9 &\-]+\:\s*", "", candidate)
+    candidate = re.sub(r"^(the most common|common|top)\s+", "", candidate, flags=re.IGNORECASE)
+    candidate = re.sub(r"\b(interview questions?|questions? and answers?)\b", "", candidate, flags=re.IGNORECASE)
+    candidate = re.sub(r"\bfor 20\d{2}\b", "", candidate, flags=re.IGNORECASE)
+    candidate = re.sub(r"\s+", " ", candidate).strip(" .,:;|-")
+    return candidate
+
+
+def detect_role_mode(role_title: str, job_description: str, requested_mode: str):
+    if requested_mode in ROLE_MODE_CONFIG and requested_mode != "auto":
+        return requested_mode
+
+    combined = f"{role_title} {job_description}".lower()
+    if any(token in combined for token in ["sde", "software engineer", "backend", "frontend", "full stack"]):
+        return "sde"
+    if any(token in combined for token in ["ai", "ml", "machine learning", "llm", "rag", "applied ai", "genai"]):
+        return "ai_ml"
+    if any(token in combined for token in ["data analyst", "data scientist", "analytics", "bi ", "power bi", "sql"]):
+        return "data"
+    if any(token in combined for token in ["product manager", "pm ", "product sense"]):
+        return "product"
+    return "auto"
+
+
+def get_role_mode_config(role_mode: str):
+    return ROLE_MODE_CONFIG.get(role_mode, ROLE_MODE_CONFIG["auto"])
+
+
+def get_role_mode_label(role_mode: str):
+    return get_role_mode_config(role_mode)["label"]
+
+
+def build_question_metrics(questions: list[dict]):
+    metrics = {
+        "total": len(questions),
+        "strong": 0,
+        "partial": 0,
+        "adjacent": 0,
+        "gap": 0,
+        "jd_resume": 0,
+        "interview_pattern": 0
+    }
+
+    for item in questions:
+        match_label = item.get("match_label", "gap")
+        if match_label in metrics:
+            metrics[match_label] += 1
+        source = item.get("question_source", "")
+        if source == "jd + resume":
+            metrics["jd_resume"] += 1
+        elif source == "interview pattern":
+            metrics["interview_pattern"] += 1
+
+    return metrics
+
+
+def build_question_groups(questions: list[dict]):
+    groups = []
+    ordered_sources = ["jd + resume", "interview pattern"]
+    titles = {
+        "jd + resume": "Personalized Role-Fit Questions",
+        "interview pattern": "Commonly Asked Role Questions"
+    }
+    descriptions = {
+        "jd + resume": "These are generated from the role brief and the strongest matching evidence found in the active resume.",
+        "interview pattern": "These are derived from live interview-pattern research and adapted to the active resume."
+    }
+
+    for source in ordered_sources:
+        items = [item for item in questions if item.get("question_source") == source]
+        if not items:
+            continue
+        groups.append({
+            "source": source,
+            "title": titles.get(source, source.title()),
+            "description": descriptions.get(source, ""),
+            "items": items
+        })
+
+    return groups
+
+
+def categorize_requirement(requirement: str, role_mode: str, question_source: str):
+    lowered = requirement.lower()
+    if question_source == "interview pattern":
+        if any(token in lowered for token in ["system design", "architecture", "scalable", "backend", "design a"]):
+            return "role pattern: system design"
+        if any(token in lowered for token in ["behavioral", "collaboration", "stakeholder", "leadership"]):
+            return "role pattern: behavioral"
+        if any(token in lowered for token in ["rag", "agent", "llm", "prompt", "model", "evaluation"]):
+            return "role pattern: technical depth"
+        return "role pattern"
+
+    if any(token in lowered for token in ["collaborate", "stakeholder", "communicat", "business", "research teams"]):
+        return "behavioral / collaboration"
+    if any(token in lowered for token in ["system design", "architecture", "scalable", "backend", "pipeline", "deploy"]):
+        return "system / architecture"
+    if any(token in lowered for token in ["sql", "dashboard", "analysis", "metrics", "experiment"]):
+        return "analytics / problem solving"
+    if any(token in lowered for token in ["prompt", "llm", "rag", "agent", "model"]):
+        return "domain / technical depth"
+    if role_mode == "sde":
+        return "software engineering"
+    return "core fit"
+
+
+def build_why_asked(requirement: str, question_source: str, match_label: str, category: str):
+    if question_source == "interview pattern":
+        return (
+            f"This topic appears in role-specific interview patterns, so it is likely to be asked to test your readiness in {category}."
+        )
+    if match_label == "gap":
+        return (
+            "This is being asked because the JD emphasizes it, but your resume does not show strong direct proof yet."
+        )
+    if match_label == "adjacent":
+        return (
+            "This is being asked to see whether you can translate adjacent experience into the exact needs of the role."
+        )
+    return (
+        "This is being asked because it is a core JD requirement and your resume suggests you should be able to defend it with specifics."
+    )
+
+
+def build_prep_tip(question_source: str, match_label: str, resume_evidence: str, role_mode: str, category: str):
+    if question_source == "interview pattern":
+        if role_mode == "sde":
+            return "Prepare a structured answer with approach, tradeoffs, edge cases, and production considerations."
+        if role_mode == "ai_ml":
+            return "Prepare to explain the architecture, evaluation approach, tradeoffs, and how you would productionize the solution."
+        return "Prepare a structured answer with context, decision process, execution details, and measurable outcome."
+
+    if match_label == "gap":
+        return "Be explicit about the gap, then bridge it with adjacent projects, fast-learning examples, and a concrete ramp-up plan."
+    if match_label == "adjacent":
+        return f"Anchor your answer in '{truncate_text(resume_evidence, 90)}' and explain why that experience transfers to this requirement."
+    if category == "behavioral / collaboration":
+        return "Answer in STAR format and emphasize cross-functional alignment, decisions, and outcomes."
+    if category == "system / architecture":
+        return "Explain the system context, your design choices, the tradeoffs you considered, and how you would scale or monitor it."
+    return "Use one concrete example, explain your exact contribution, the tools involved, and the measurable impact."
 
 
 def extract_interview_topics(interview_signals: list[str], max_items=2):
@@ -849,7 +1045,7 @@ def extract_interview_topics(interview_signals: list[str], max_items=2):
             signal = signal.split(":", 1)[1]
         fragments = re.split(r",|\.|;|\|", signal)
         for fragment in fragments:
-            candidate = normalize_text(fragment)
+            candidate = normalize_topic_label(fragment)
             if len(candidate) < 18:
                 continue
             candidate_lower = candidate.lower()
@@ -861,13 +1057,40 @@ def extract_interview_topics(interview_signals: list[str], max_items=2):
                 if len(topics) == max_items:
                     return topics
         if "interview question" in lowered and len(topics) < max_items:
-            fallback = truncate_text(signal, 120)
+            fallback = normalize_topic_label(truncate_text(signal, 120))
             if fallback.lower() not in seen:
                 seen.add(fallback.lower())
                 topics.append(fallback)
                 if len(topics) == max_items:
                     return topics
     return topics
+
+
+def are_questions_similar(left: str, right: str):
+    left_words = {
+        word for word in re.findall(r"[a-zA-Z0-9\+\#]+", left.lower())
+        if len(word) > 3
+    }
+    right_words = {
+        word for word in re.findall(r"[a-zA-Z0-9\+\#]+", right.lower())
+        if len(word) > 3
+    }
+    return len(left_words & right_words) >= QUESTION_SIMILARITY_WORD_THRESHOLD
+
+
+def dedupe_questions(questions: list[dict], limit=MAX_INTERVIEW_QUESTIONS):
+    deduped = []
+    for item in questions:
+        if any(
+            are_questions_similar(item["requirement"], existing["requirement"]) or
+            item["resume_evidence"] == existing["resume_evidence"]
+            for existing in deduped
+        ):
+            continue
+        deduped.append(item)
+        if len(deduped) == limit:
+            break
+    return deduped
 
 
 def score_requirement_match(requirement: str, score: float, resume_chunk: dict):
@@ -911,7 +1134,7 @@ def find_best_resume_match_for_requirement(requirement: str, top_k: int = 5):
     return best["chunk"], best["score"]
 
 
-def build_interview_pattern_questions(interview_signals: list[str], company_name: str, role_title: str):
+def build_interview_pattern_questions(interview_signals: list[str], company_name: str, role_title: str, role_mode: str):
     questions = []
     topics = extract_interview_topics(interview_signals, max_items=2)
 
@@ -922,16 +1145,26 @@ def build_interview_pattern_questions(interview_signals: list[str], company_name
 
         if match_label == "gap":
             question_text = (
-                f"Interview prep sources for {company_name or 'this company'} suggest focus on '{truncate_text(topic, 70)}'. "
-                f"What answer would you give if asked this for a {role_title or 'target role'} interview, and how would you bridge any missing direct experience?"
+                f"This is a commonly asked topic for a {role_title or 'target role'} interview: '{truncate_text(topic, 70)}'. "
+                f"What answer would you give if this comes up at {company_name or 'the company'}, and how would you bridge any missing direct experience?"
             )
             resume_chunk = None
+        elif match_label == "adjacent":
+            section = resume_chunk.get("section", "general") if resume_chunk else "general"
+            question_text = (
+                f"This is a commonly asked topic for a {role_title or 'target role'} interview: '{truncate_text(topic, 70)}'. "
+                f"Using your {section} evidence '{truncate_text(evidence, 120)}', how would you connect adjacent experience to the role and clearly frame the gap?"
+            )
         else:
             section = resume_chunk.get("section", "general") if resume_chunk else "general"
             question_text = (
-                f"Interview prep sources for {company_name or 'this company'} suggest focus on '{truncate_text(topic, 70)}'. "
-                f"Using your {section} evidence '{truncate_text(evidence, 120)}', how would you answer this in a {role_title or 'target role'} interview?"
+                f"This is a commonly asked topic for a {role_title or 'target role'} interview: '{truncate_text(topic, 70)}'. "
+                f"Using your {section} evidence '{truncate_text(evidence, 120)}', how would you answer this if asked at {company_name or 'the company'}?"
             )
+
+        category = categorize_requirement(topic, role_mode, "interview pattern")
+        why_asked = build_why_asked(topic, "interview pattern", match_label, category)
+        prep_tip = build_prep_tip("interview pattern", match_label, evidence, role_mode, category)
 
         questions.append({
             "requirement": topic,
@@ -942,7 +1175,10 @@ def build_interview_pattern_questions(interview_signals: list[str], company_name
             "resume_evidence": evidence,
             "section": resume_chunk.get("section", "gap") if resume_chunk else "gap",
             "page_number": resume_chunk.get("page_number") if resume_chunk else None,
-            "question_source": "interview pattern"
+            "question_source": "interview pattern",
+            "question_category": category,
+            "why_asked": why_asked,
+            "prep_tip": prep_tip
         })
 
     return questions
@@ -952,6 +1188,7 @@ def generate_interview_prep(
     job_description: str,
     company_name: str = "",
     role_title: str = "",
+    role_mode: str = "auto",
     company_context: str = "",
     interview_notes: str = ""
 ):
@@ -964,6 +1201,14 @@ def generate_interview_prep(
     normalized_jd = job_description.strip()
     if not normalized_jd:
         raise HTTPException(status_code=400, detail="Paste a job description to generate interview questions.")
+    if len(normalized_jd) > MAX_JOB_DESCRIPTION_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Job description is too long ({len(normalized_jd)} characters). "
+                f"Please shorten it to {MAX_JOB_DESCRIPTION_CHARS} characters or less and try again."
+            )
+        )
 
     requirements = split_job_description_into_requirements(normalized_jd)
     if not requirements:
@@ -972,6 +1217,8 @@ def generate_interview_prep(
             detail="Could not identify enough usable requirements from the job description."
         )
 
+    resolved_role_mode = detect_role_mode(role_title, normalized_jd, role_mode)
+
     auto_research_requested = bool(company_name.strip() or role_title.strip())
 
     with ThreadPoolExecutor(max_workers=3) as executor:
@@ -979,7 +1226,8 @@ def generate_interview_prep(
             run_company_research,
             company_name,
             role_title,
-            normalized_jd
+            normalized_jd,
+            resolved_role_mode
         ) if auto_research_requested else None
         company_future = executor.submit(extract_context_signals, company_context, 4)
         interview_future = executor.submit(extract_context_signals, interview_notes, 4)
@@ -1011,8 +1259,6 @@ def generate_interview_prep(
     auto_research_used = bool(live_research_results)
 
     questions = []
-    matched_requirements = 0
-    gap_requirements = 0
     role_pattern_slots = min(2, len(extract_interview_topics(interview_signals, max_items=2)))
     jd_question_limit = max(1, MAX_INTERVIEW_QUESTIONS - role_pattern_slots)
 
@@ -1020,14 +1266,14 @@ def generate_interview_prep(
         resume_chunk, score = find_best_resume_match_for_requirement(requirement)
 
         match_label = classify_requirement_match(requirement, score, resume_chunk)
-        if match_label in {"strong", "partial"}:
-            matched_requirements += 1
-        else:
-            gap_requirements += 1
+        if match_label == "gap":
             resume_chunk = None
 
         resume_evidence = select_supporting_evidence_for_requirement(requirement, resume_chunk)
         question_text = build_question_text(requirement, resume_chunk, match_label, resume_evidence)
+        category = categorize_requirement(requirement, resolved_role_mode, "jd + resume")
+        why_asked = build_why_asked(requirement, "jd + resume", match_label, category)
+        prep_tip = build_prep_tip("jd + resume", match_label, resume_evidence, resolved_role_mode, category)
 
         questions.append({
             "requirement": requirement,
@@ -1038,23 +1284,30 @@ def generate_interview_prep(
             "resume_evidence": resume_evidence,
             "section": resume_chunk.get("section", "general") if resume_chunk else "gap",
             "page_number": resume_chunk.get("page_number") if resume_chunk else None,
-            "question_source": "jd + resume"
+            "question_source": "jd + resume",
+            "question_category": category,
+            "why_asked": why_asked,
+            "prep_tip": prep_tip
         })
 
-    pattern_questions = build_interview_pattern_questions(interview_signals, company_name.strip(), role_title.strip())
-    for item in pattern_questions:
-        if item["match_label"] in {"strong", "partial"}:
-            matched_requirements += 1
-        else:
-            gap_requirements += 1
+    pattern_questions = build_interview_pattern_questions(
+        interview_signals,
+        company_name.strip(),
+        role_title.strip(),
+        resolved_role_mode
+    )
     questions.extend(pattern_questions[:role_pattern_slots])
+    questions = dedupe_questions(questions, limit=MAX_INTERVIEW_QUESTIONS)
+
+    matched_requirements = sum(1 for item in questions if item["match_label"] in {"strong", "partial", "adjacent"})
+    gap_requirements = sum(1 for item in questions if item["match_label"] == "gap")
 
     if gap_requirements == 0:
-        summary = "All generated questions are tied to clear resume-to-JD overlaps."
+        summary = "All generated questions are supported by clear resume alignment or interview-pattern relevance."
     else:
         summary = (
-            f"{matched_requirements} questions are built from direct or partial overlaps, and "
-            f"{gap_requirements} focus on likely interview gaps you should prepare to explain."
+            f"{matched_requirements} questions are aligned to your background or adjacent experience, and "
+            f"{gap_requirements} highlight likely gaps you should prepare to address directly."
         )
 
     if company_name or role_title:
@@ -1065,6 +1318,7 @@ def generate_interview_prep(
         "status": "success",
         "company_name": company_name.strip() or None,
         "role_title": role_title.strip() or None,
+        "role_mode": resolved_role_mode,
         "job_description": normalized_jd,
         "document_id": document_store["document_id"],
         "filename": document_store["filename"],
@@ -1077,7 +1331,10 @@ def generate_interview_prep(
         "latency_summary": estimate_latency_summary(bool(company_signals), bool(interview_signals), auto_research_used),
         "auto_research_used": auto_research_used,
         "research_status": get_research_status(auto_research_used, len(live_research_results), live_research_status),
-        "research_query": research_query
+        "research_query": research_query,
+        "question_metrics": build_question_metrics(questions),
+        "question_groups": build_question_groups(questions),
+        "role_mode_label": get_role_mode_label(resolved_role_mode)
     }
 
 
@@ -1243,6 +1500,7 @@ async def generate_interview_questions_api(
     job_description: str = Form(...),
     company_name: str = Form(""),
     role_title: str = Form(""),
+    role_mode: str = Form("auto"),
     company_context: str = Form(""),
     interview_notes: str = Form("")
 ):
@@ -1250,6 +1508,7 @@ async def generate_interview_questions_api(
         job_description=job_description,
         company_name=company_name,
         role_title=role_title,
+        role_mode=role_mode,
         company_context=company_context,
         interview_notes=interview_notes
     )
@@ -1257,6 +1516,7 @@ async def generate_interview_questions_api(
         "status": result["status"],
         "company_name": result["company_name"],
         "role_title": result["role_title"],
+        "role_mode": result["role_mode"],
         "job_description": result["job_description"],
         "document_id": result["document_id"],
         "filename": result["filename"],
@@ -1330,6 +1590,7 @@ async def generate_interview_questions_ui(
     job_description: str = Form(...),
     company_name: str = Form(""),
     role_title: str = Form(""),
+    role_mode: str = Form("auto"),
     company_context: str = Form(""),
     interview_notes: str = Form("")
 ):
@@ -1338,6 +1599,7 @@ async def generate_interview_questions_ui(
             job_description=job_description,
             company_name=company_name,
             role_title=role_title,
+            role_mode=role_mode,
             company_context=company_context,
             interview_notes=interview_notes
         )
@@ -1348,6 +1610,7 @@ async def generate_interview_questions_ui(
             job_description=result["job_description"],
             company_name=company_name,
             role_title=role_title,
+            role_mode=result["role_mode"],
             company_context=company_context,
             interview_notes=interview_notes,
             interview_questions=result["questions"],
@@ -1358,6 +1621,9 @@ async def generate_interview_questions_ui(
             auto_research_used=result["auto_research_used"],
             research_status=result["research_status"],
             research_query=result["research_query"],
+            question_metrics=result["question_metrics"],
+            question_groups=result["question_groups"],
+            role_mode_label=result["role_mode_label"],
             page_title=f"Interview prep ready for {result['filename']}"
         )
     except HTTPException as e:
@@ -1366,6 +1632,7 @@ async def generate_interview_questions_ui(
             job_description=job_description,
             company_name=company_name,
             role_title=role_title,
+            role_mode=role_mode,
             company_context=company_context,
             interview_notes=interview_notes,
             best_match=e.detail
