@@ -128,4 +128,3 @@ Resume-RAGing/
 - Resume Q&A is currently more reliable than the company-aware interview-prep flow.
 - The interview-prep flow still needs stronger evidence validation, better snippet selection, and more precise separation between company context and interview-pattern research.
 
-## new 
